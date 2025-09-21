@@ -28,23 +28,23 @@ const References = (setCurrentView) => {
 
         { id: 4, title: "ACTIVITY" },
         { id: 5, title: "DEPARTMENT" },
-        { id: 6, title: "Promoted-SKU/s" },
-        { id: 7, title: "USER ROLE" },
 
-        { id: 8, title: "SALESGROUP" },
-        { id: 9, title: "POSITION" },
+        { id: 6, title: "USER ROLE" },
 
-        { id: 10, title: "LISTING-ACTIVITY" },
-        { id: 11, title: "REGULAR-SKU" },
+        { id: 7, title: "SALESGROUP" },
+        { id: 8, title: "POSITION" },
 
-        { id: 12, title: "CATEGORY" },
-        { id: 13, title: "CATEGORY-LISTING" },
+        { id: 9, title: "LISTING-ACTIVITY" },
 
-        { id: 14, title: "APPROVAL-SETTING" },
 
-        { id: 15, title: "BUDGET-VIEW" },
+        { id: 10, title: "CATEGORY" },
+        { id: 11, title: "CATEGORY-LIST-SKU/s" },
 
-        { id: 16, title: "404-PAGE" },
+        { id: 12, title: "APPROVAL-SETTING" },
+
+        { id: 13, title: "BUDGET-VIEW" },
+
+        { id: 14, title: "404-PAGE" },
 
 
 
@@ -58,7 +58,7 @@ const References = (setCurrentView) => {
 
             || card.title === 'APPROVAL-SETTING'
 
-            || card.title === 'DEPARTMENT' || card.title === 'ACCOUNTS' || card.title === 'Promoted-SKU/s' || card.title === 'ACTIVITY' || card.title === 'SALESGROUP' || card.title === 'DISTRIBUTOR' || card.title === 'CATEGORY' || card.title === 'CATEGORY-LISTING') {
+            || card.title === 'DEPARTMENT' || card.title === 'ACCOUNTS' || card.title === 'Promoted-SKU/s' || card.title === 'ACTIVITY' || card.title === 'SALESGROUP' || card.title === 'DISTRIBUTOR' || card.title === 'CATEGORY' || card.title === 'CATEGORY-LIST-SKU/s') {
             setView(card.title);
         } else {
             alert(`${card.title} clicked`);
@@ -91,7 +91,7 @@ const References = (setCurrentView) => {
                 {view === 'ACTIVITY' && <Activity />}
                 {view === 'SALESGROUP' && <SalesGroup />}
 
-                {view === 'DISTRIBUTOR-LISTING' && <CategorySelector />}
+                {view === 'CATEGORY-LIST-SKU/s' && <CategorySelector />}
                 {view === 'DEPARTMENT' && <Department />}
 
                 {view === 'BUDGET-VIEW' && <Budgets />}
