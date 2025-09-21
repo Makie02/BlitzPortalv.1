@@ -13,6 +13,9 @@ import RegularSkuTable from '../NewComponents/RegularSkuTable.jsx';
 import Category from '../NewComponents/Category.jsx';
 import Category_Listing from '../NewComponents/Category_Listing.jsx';
 import ApprovalSettings from '../NewComponents/ApprovalSettings.jsx';
+import Budget from '../NewComponents/Budget.js';
+import NotFoundPage from '../Nofound/NotFoundPage.js';
+import ModuleForm from '../NewComponents/ModuleForm.js';
 
 const References = (setCurrentView) => {
     const [view, setView] = useState(null); // null means show cards list
@@ -20,7 +23,8 @@ const References = (setCurrentView) => {
     const cards = [
         { id: 1, title: "DISTRIBUTOR" },
         { id: 2, title: "DISTRIBUTOR-LISTING" },
-        { id: 3, title: "ACCOUNTS" },
+
+        { id: 3, title: "MODULE" },
 
         { id: 4, title: "ACTIVITY" },
         { id: 5, title: "DEPARTMENT" },
@@ -38,6 +42,11 @@ const References = (setCurrentView) => {
 
         { id: 14, title: "APPROVAL-SETTING" },
 
+        { id: 15, title: "BUDGET-VIEW" },
+
+        { id: 16, title: "404-PAGE" },
+
+
 
 
 
@@ -45,7 +54,7 @@ const References = (setCurrentView) => {
 
     const handleClick = (card) => {
         // For cards that have components, set view to title
-        if (card.title === 'USER ROLE' || card.title === 'DISTRIBUTOR-LISTING' || card.title === 'USER MANAGEMENT' || card.title === 'POSITION' || card.title === 'LISTING-ACTIVITY' || card.title === 'REGULAR-SKU'
+        if (card.title === 'USER ROLE' || card.title === 'MODULE' || card.title === 'BUDGET-VIEW' || card.title === '404-PAGE' || card.title === 'DISTRIBUTOR-LISTING' || card.title === 'USER MANAGEMENT' || card.title === 'POSITION' || card.title === 'LISTING-ACTIVITY' || card.title === 'REGULAR-SKU'
 
             || card.title === 'APPROVAL-SETTING'
 
@@ -85,6 +94,8 @@ const References = (setCurrentView) => {
                 {view === 'DISTRIBUTOR-LISTING' && <CategorySelector />}
                 {view === 'DEPARTMENT' && <Department />}
 
+                {view === 'BUDGET-VIEW' && <Budget />}
+
 
                 {view === 'Promoted-SKU/s' && <PromotedSKU />}
                 {view === 'POSITION' && <Position />}
@@ -96,7 +107,8 @@ const References = (setCurrentView) => {
                 {view === 'CATEGORY-LISTING' && <Category_Listing />}
 
                 {view === 'APPROVAL-SETTING' && <ApprovalSettings />}
-
+                {view === '404-PAGE' && <NotFoundPage />}
+                {view === 'MODULE' && <ModuleForm />}
 
 
 
