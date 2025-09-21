@@ -417,27 +417,28 @@ const RegularVisaForm = () => {
     React.useEffect(() => {
         async function fetchCoverPwpWithStatus() {
             try {
-                // Step 1: Fetch coverPwp codes from amount_badget
+                // Step 1: Fetch amount_badget data
                 const { data: amountData, error: amountError } = await supabase
                     .from('amount_badget')
                     .select('pwp_code, amountbadget, remainingbalance');
-
                 if (amountError) throw amountError;
 
-                // Extract all pwp_codes
+                // Step 2: Fetch approval history for those pwp_codes
                 const pwpCodes = amountData.map(item => item.pwp_code);
-
-                // Step 2: Fetch latest approval response for each pwp_code from Approval_History
-                // We'll fetch all approval history entries for these codes, sorted by DateResponded desc
                 const { data: approvalData, error: approvalError } = await supabase
                     .from('Approval_History')
                     .select('PwpCode, Response, DateResponded')
                     .in('PwpCode', pwpCodes)
                     .order('DateResponded', { ascending: false });
-
                 if (approvalError) throw approvalError;
 
-                // Step 3: Create a map from pwp_code -> latest Response
+                // Step 3: Fetch cover_pwp data to get createForm
+                const { data: coverPwpData, error: coverPwpError } = await supabase
+                    .from('cover_pwp')
+                    .select('cover_code, createForm');
+                if (coverPwpError) throw coverPwpError;
+
+                // Step 4: Build maps for quick lookup
                 const latestResponseMap = new Map();
                 for (const record of approvalData) {
                     if (!latestResponseMap.has(record.PwpCode)) {
@@ -445,14 +446,24 @@ const RegularVisaForm = () => {
                     }
                 }
 
-                // Step 4: Merge amountData with approval status
-                // Approved = true only if latest response is "approved" (case insensitive), otherwise false
+                const createFormMap = new Map();
+                for (const record of coverPwpData) {
+                    createFormMap.set(record.cover_code, record.createForm);
+                }
+
+                // Step 5: Merge everything together
                 const mergedData = amountData.map(item => {
                     const latestResponse = latestResponseMap.get(item.pwp_code) || null;
                     return {
                         ...item,
                         Approved: latestResponse === 'approved',
+                        createForm: createFormMap.get(item.pwp_code) || 'N/A', // fallback if no createForm found
                     };
+                });
+
+                // Optional: Log to console in requested format
+                mergedData.forEach(item => {
+                    console.log(`${item.pwp_code} - ${item.remainingbalance} - ${item.createForm}`);
                 });
 
                 setCoverPwpWithStatus(mergedData);
@@ -464,6 +475,9 @@ const RegularVisaForm = () => {
 
         fetchCoverPwpWithStatus();
     }, []);
+
+
+
 
 
     const [showCoverModal, setShowCoverModal] = useState(false);
@@ -805,60 +819,74 @@ const RegularVisaForm = () => {
     // Handle changes on form inputs, including distributor change
     const handleFormChange = async (e) => {
         const { name, value } = e.target;
+        console.log(`📝 Form change detected - Field: "${name}", Value: "${value}"`);
 
         setFormData((prev) => {
             const newForm = { ...prev, [name]: value };
+            console.log("📋 Updated formData:", newForm);
 
             if (settingsMap[value]) {
                 newForm.sku = settingsMap[value].sku;
                 newForm.accounts = settingsMap[value].accounts;
                 newForm.amount_display = settingsMap[value].amount_display;
-                console.log("🔍 SKU enabled:", settingsMap[value].sku);
+
+                console.log("🔍 Applied settingsMap values:", {
+                    sku: newForm.sku,
+                    accounts: newForm.accounts,
+                    amount_display: newForm.amount_display,
+                });
             }
 
-            // Reset budget rows when distributor or accountType changes
             if (name === "distributor" || name === "accountType") {
-                setRowsAccounts([]);  // Clear budget rows for fresh input
+                setRowsAccounts([]);
+                console.log("🧹 Cleared rowsAccounts due to distributor/accountType change");
             }
 
             return newForm;
         });
 
+        // Handle distributor change
         if (name === "distributor") {
             try {
                 const selectedDistributor = distributors.find((d) => d.code === value);
 
                 if (!selectedDistributor) {
-                    console.warn("Distributor not found.");
+                    console.warn("⚠️ Distributor not found for code:", value);
                     return;
                 }
 
+                console.log("📦 Selected distributor:", selectedDistributor);
+
                 const { data, error } = await supabase
                     .from("categorydetails")
-                    .select("id, code, name, description")
-                    .eq("principal_id", selectedDistributor.id);
+                    .select("code, name, description")
+                    .eq("principal_id", selectedDistributor.id);  // ✅ Correct key
 
                 if (error) throw error;
 
+                console.log("📥 Raw data from Supabase:", data);
+
                 const formatted = data.map((item) => ({
-                    id: item.id,
                     code: item.code,
                     name: item.name,
                     description: item.description,
                 }));
 
                 setAccountTypes(formatted);
-                setAccountSearchTerm("");
-                // Reset selected accounts when distributor changes
-                setFormData((prev) => ({ ...prev, accountType: [] }));
+                console.log("✅ Formatted accountTypes:", formatted);
 
-                console.log("✅ Fetched categories for distributor:", formatted);
+                setAccountSearchTerm("");
+                setFormData((prev) => ({ ...prev, accountType: [] }));
+                console.log("🧹 Reset formData.accountType after distributor change");
+
             } catch (error) {
                 console.error("❌ Failed to fetch category details:", error.message);
                 setAccountTypes([]);
             }
         }
     };
+
+
 
 
     // compute selected names
@@ -1360,7 +1388,7 @@ const RegularVisaForm = () => {
     // Handle export to Excel
 
 
- 
+
 
 
 
@@ -1431,82 +1459,82 @@ const RegularVisaForm = () => {
         }
     };
 
- const submit_all = async (e) => {
-  e.preventDefault();
+    const submit_all = async (e) => {
+        e.preventDefault();
 
-  try {
-    // Show loading modal for 3 seconds (3000 ms)
-    await Swal.fire({
-      title: 'Submitting...',
-      html: 'Please wait while we save your data.',
-      allowOutsideClick: false,
-      didOpen: () => {
-        Swal.showLoading();
-      },
-      timer: 3000,
-      timerProgressBar: true,
-    });
+        try {
+            // Show loading modal for 3 seconds (3000 ms)
+            await Swal.fire({
+                title: 'Submitting...',
+                html: 'Please wait while we save your data.',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                },
+                timer: 3000,
+                timerProgressBar: true,
+            });
 
-    // After loading modal closes, start actual submission
-    console.log(`[${new Date().toLocaleString()}] 📝 Submitting SKUs...`);
-    await submitTosku();
-    console.log(`[${new Date().toLocaleString()}] ✅ SKUs submitted.`);
+            // After loading modal closes, start actual submission
+            console.log(`[${new Date().toLocaleString()}] 📝 Submitting SKUs...`);
+            await submitTosku();
+            console.log(`[${new Date().toLocaleString()}] ✅ SKUs submitted.`);
 
-    console.log(`[${new Date().toLocaleString()}] 📝 Submitting form data...`);
-    await handleSubmitFormAndAttachments();
-    console.log(`[${new Date().toLocaleString()}] ✅ Form data submitted.`);
+            console.log(`[${new Date().toLocaleString()}] 📝 Submitting form data...`);
+            await handleSubmitFormAndAttachments();
+            console.log(`[${new Date().toLocaleString()}] ✅ Form data submitted.`);
 
-    console.log(`[${new Date().toLocaleString()}] 💾 Saving budget data to Supabase...`);
+            console.log(`[${new Date().toLocaleString()}] 💾 Saving budget data to Supabase...`);
 
-    const filteredRows = rowsAccounts.filter(row =>
-      formData.accountType.includes(row.account_code)
-    );
+            const filteredRows = rowsAccounts.filter(row =>
+                formData.accountType.includes(row.account_code)
+            );
 
-    const totalBudget = filteredRows
-      .reduce((sum, row) => sum + (parseFloat(row.budget) || 0), 0)
-      .toFixed(2);
+            const totalBudget = filteredRows
+                .reduce((sum, row) => sum + (parseFloat(row.budget) || 0), 0)
+                .toFixed(2);
 
-    const budgetRowsToInsert = filteredRows.map(row => ({
-      regularcode: formData.regularpwpcode,
-      account_code: row.account_code,
-      account_name: row.account_name,
-      budget: row.budget || 0,
-      created_at: row.created_at || new Date().toISOString(),
-      createform: 'ADMINISTRATOR',
-      total_budget: totalBudget,
-    }));
+            const budgetRowsToInsert = filteredRows.map(row => ({
+                regularcode: formData.regularpwpcode,
+                account_code: row.account_code,
+                account_name: row.account_name,
+                budget: row.budget || 0,
+                created_at: row.created_at || new Date().toISOString(),
+                createform: 'ADMINISTRATOR',
+                total_budget: totalBudget,
+            }));
 
-    if (budgetRowsToInsert.length > 0) {
-      const { data, error } = await supabase
-        .from('regular_accountlis_badget')
-        .insert(budgetRowsToInsert);
+            if (budgetRowsToInsert.length > 0) {
+                const { data, error } = await supabase
+                    .from('regular_accountlis_badget')
+                    .insert(budgetRowsToInsert);
 
-      if (error) throw error;
+                if (error) throw error;
 
-      console.log(`[${new Date().toLocaleString()}] ✅ Budget data saved:`, data);
-    } else {
-      console.log(`[${new Date().toLocaleString()}] ℹ️ No budget rows to insert.`);
-    }
+                console.log(`[${new Date().toLocaleString()}] ✅ Budget data saved:`, data);
+            } else {
+                console.log(`[${new Date().toLocaleString()}] ℹ️ No budget rows to insert.`);
+            }
 
-    await Swal.fire({
-      title: 'Success!',
-      text: 'Your data has been successfully submitted and saved.',
-      icon: 'success',
-      confirmButtonText: 'Ok',
-    });
+            await Swal.fire({
+                title: 'Success!',
+                text: 'Your data has been successfully submitted and saved.',
+                icon: 'success',
+                confirmButtonText: 'Ok',
+            });
 
-    window.location.reload();
+            window.location.reload();
 
-  } catch (error) {
-    console.error(`[${new Date().toLocaleString()}] ❌ Submit All Error:`, error);
-    Swal.fire({
-      title: 'Error!',
-      text: `There was an issue submitting your data: ${error.message}`,
-      icon: 'error',
-      confirmButtonText: 'Try Again',
-    });
-  }
-};
+        } catch (error) {
+            console.error(`[${new Date().toLocaleString()}] ❌ Submit All Error:`, error);
+            Swal.fire({
+                title: 'Error!',
+                text: `There was an issue submitting your data: ${error.message}`,
+                icon: 'error',
+                confirmButtonText: 'Try Again',
+            });
+        }
+    };
 
 
 
@@ -1865,6 +1893,9 @@ const RegularVisaForm = () => {
         fetchApprovalData();
     }, []);
 
+    const currentUser = JSON.parse(localStorage.getItem('loggedInUser'));
+    const currentUserName = currentUser?.name?.toLowerCase().trim() || "";
+    const role = currentUser?.role || "";
 
     const renderStepContent = () => {
         switch (step) {
@@ -2189,7 +2220,7 @@ const RegularVisaForm = () => {
                                             style={{
                                                 position: "absolute",
                                                 right: "40px",
-                                                top: "60%",
+                                                top: "70%",
                                                 transform: "translateY(-50%)",
                                                 pointerEvents: "none",
                                                 color: "#555",
@@ -2204,7 +2235,7 @@ const RegularVisaForm = () => {
                                             style={{
                                                 position: "absolute",
                                                 right: "10px",
-                                                top: "60%",
+                                                top: "70%",
                                                 transform: "translateY(-50%)",
                                                 pointerEvents: "none",
                                                 color: "#555",
@@ -2687,6 +2718,7 @@ const RegularVisaForm = () => {
                                         </Modal.Title>
                                     </Modal.Header>
 
+
                                     <Modal.Body>
                                         <input
                                             type="text"
@@ -2699,6 +2731,13 @@ const RegularVisaForm = () => {
                                         <ul className="list-group" style={{ maxHeight: "250px", overflowY: "auto" }}>
                                             {coverPwpWithStatus
                                                 .filter(cp => cp.pwp_code && typeof cp.pwp_code === 'string' && cp.pwp_code.toLowerCase().includes(coverPwpSearch.toLowerCase()))
+                                                .filter(cp => {
+                                                    // Show if admin
+                                                    if (role === 'admin') return true;
+
+                                                    // Otherwise only show if createForm matches current user name
+                                                    return cp.createForm?.toLowerCase().trim() === currentUserName;
+                                                })
                                                 .map((cp, idx) => {
                                                     const isPending = !cp.Approved;
                                                     return (
@@ -2718,21 +2757,25 @@ const RegularVisaForm = () => {
                                                                 cursor: isPending ? 'not-allowed' : 'pointer',
                                                                 fontFamily: 'monospace',
                                                                 opacity: isPending ? 0.8 : 1,
-                                                                pointerEvents: isPending ? 'none' : 'auto',  // Prevent all mouse events if pending
+                                                                pointerEvents: isPending ? 'none' : 'auto',
+                                                                display: 'flex',
+                                                                justifyContent: 'space-between',
                                                             }}
-                                                            tabIndex={isPending ? -1 : 0}  // Prevent tab focus on disabled items
+                                                            tabIndex={isPending ? -1 : 0}
                                                         >
-                                                            {cp.pwp_code?.toUpperCase().padEnd(20, ' ')}
-                                                            <span className="badge bg-secondary">
+                                                            <div style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                                {cp.pwp_code?.toUpperCase()}
+                                                            </div>
+                                                            <div style={{ marginLeft: '10px', minWidth: '100px', textAlign: 'right', fontWeight: 'bold' }}>
                                                                 {cp.remainingbalance !== null
                                                                     ? cp.remainingbalance.toLocaleString('en-US', {
                                                                         minimumFractionDigits: 2,
                                                                         maximumFractionDigits: 2,
                                                                     })
                                                                     : "-"}
-                                                            </span>
+                                                            </div>
+                                                     
                                                         </li>
-
                                                     );
                                                 })}
 
@@ -2741,6 +2784,8 @@ const RegularVisaForm = () => {
                                             )}
                                         </ul>
                                     </Modal.Body>
+
+
 
                                     <Modal.Footer style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <div style={{ display: 'inline-flex', alignItems: 'center' }}>
@@ -3001,10 +3046,15 @@ const RegularVisaForm = () => {
                                                     <tr key={row.SKUITEM || idx}>
                                                         <td style={{ display: 'flex', alignItems: 'center' }}>
                                                             <Form.Control
-                                                                value={row.SKUITEM}
+                                                                value={
+                                                                    categoryListing.find(sku => sku.sku_code === row.SKUITEM)
+                                                                        ? `${row.SKUITEM} - ${categoryListing.find(sku => sku.sku_code === row.SKUITEM)?.name}`
+                                                                        : row.SKUITEM
+                                                                }
                                                                 onChange={e => handleChangesku(idx, 'SKUITEM', e.target.value)}
-                                                            // remove readOnly so user can edit if needed
+                                                                readOnly
                                                             />
+
 
 
 
