@@ -13,7 +13,7 @@ import RegularSkuTable from '../NewComponents/RegularSkuTable.jsx';
 import Category from '../NewComponents/Category.jsx';
 import Category_Listing from '../NewComponents/Category_Listing.jsx';
 import ApprovalSettings from '../NewComponents/ApprovalSettings.jsx';
-import Budget from '../NewComponents/Budget.js';
+import Budgets from '../NewComponents/Budget.js';
 import NotFoundPage from '../Nofound/NotFoundPage.js';
 import ModuleForm from '../NewComponents/ModuleForm.js';
 
@@ -94,7 +94,7 @@ const References = (setCurrentView) => {
                 {view === 'DISTRIBUTOR-LISTING' && <CategorySelector />}
                 {view === 'DEPARTMENT' && <Department />}
 
-                {view === 'BUDGET-VIEW' && <Budget />}
+                {view === 'BUDGET-VIEW' && <Budgets />}
 
 
                 {view === 'Promoted-SKU/s' && <PromotedSKU />}
