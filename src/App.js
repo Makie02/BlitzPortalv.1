@@ -340,9 +340,10 @@ function App() {
   }, [loggedInUser?.PermissionRole]);
 
   // Show NotFoundPage if no critical data
-if (noDataFound && loggedInUser) {
+if (loggedInUser && noDataFound && currentView !== 'LoginPage') {
   return <NotFoundPage setCurrentView={setCurrentView} />;
 }
+
 
 
   const renderComponent = (view) => {
