@@ -91,7 +91,7 @@ const References = (setCurrentView) => {
                 {view === 'ACTIVITY' && <Activity />}
                 {view === 'SALESGROUP' && <SalesGroup />}
 
-                {view === 'CATEGORY-LIST-SKU/s' && <CategorySelector />}
+                {view === 'DISTRIBUTOR-LISTING' && <CategorySelector />}
                 {view === 'DEPARTMENT' && <Department />}
 
                 {view === 'BUDGET-VIEW' && <Budgets />}
@@ -104,7 +104,7 @@ const References = (setCurrentView) => {
                 {view === 'REGULAR-SKU' && <RegularSkuTable />}
 
                 {view === 'CATEGORY' && <Category />}
-                {view === 'CATEGORY-LISTING' && <Category_Listing />}
+                {view === 'CATEGORY-LIST-SKU/s' && <Category_Listing />}
 
                 {view === 'APPROVAL-SETTING' && <ApprovalSettings />}
                 {view === '404-PAGE' && <NotFoundPage />}
