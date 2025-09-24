@@ -665,25 +665,7 @@ const RegularVisaForm = () => {
         // Main state update block
         setFormData((prev) => {
             const newForm = { ...prev, [name]: value };
-            console.log("📋 Updated formData:", newForm);
 
-<<<<<<< HEAD
-            if (settingsMap[value]) {
-                newForm.sku = settingsMap[value].sku;
-                newForm.accounts = settingsMap[value].accounts;
-                newForm.amount_display = settingsMap[value].amount_display;
-
-                console.log("🔍 Applied settingsMap values:", {
-                    sku: newForm.sku,
-                    accounts: newForm.accounts,
-                    amount_display: newForm.amount_display,
-                });
-            }
-
-            if (name === "distributor" || name === "accountType") {
-                setRowsAccounts([]);
-                console.log("🧹 Cleared rowsAccounts due to distributor/accountType change");
-=======
             if (name === "activity") {
                 const selectedActivity = activities.find((a) => a.code === value);
                 newForm.activityName = selectedActivity?.name || "";
@@ -701,48 +683,27 @@ const RegularVisaForm = () => {
                         amount_display: newForm.amount_display,
                     });
                 }
->>>>>>> adbe71a (Updated  new feature)
             }
 
             console.log("📋 Updated formData:", newForm);
             return newForm;
         });
 
-<<<<<<< HEAD
-        // Handle distributor change
-=======
         // 🔄 If distributor changes, fetch related data
->>>>>>> adbe71a (Updated  new feature)
         if (name === "distributor") {
             try {
                 const selectedDistributor = distributors.find((d) => d.code === Number(value));
 
                 if (!selectedDistributor) {
                     console.warn("⚠️ Distributor not found for code:", value);
-<<<<<<< HEAD
-=======
                     setAccountTypes([]);
->>>>>>> adbe71a (Updated  new feature)
                     return;
                 }
 
                 console.log("📦 Selected distributor:", selectedDistributor);
-<<<<<<< HEAD
-
-                const { data, error } = await supabase
-                    .from("categorydetails")
-                    .select("code, name, description")
-                    .eq("principal_id", selectedDistributor.id);  // ✅ Correct key
-=======
->>>>>>> adbe71a (Updated  new feature)
 
                 const isBadOrder = selectedDistributor.name === "BAD ORDER";
 
-<<<<<<< HEAD
-                console.log("📥 Raw data from Supabase:", data);
-
-                const formatted = data.map((item) => ({
-=======
                 setFormData((prev) => ({
                     ...prev,
                     distributor: value,
@@ -800,28 +761,18 @@ const RegularVisaForm = () => {
                 }
 
                 const formatted = allData.map((item) => ({
->>>>>>> adbe71a (Updated  new feature)
                     code: item.code,
                     name: item.name,
                     description: item.description,
                 }));
 
                 setAccountTypes(formatted);
-<<<<<<< HEAD
-                console.log("✅ Formatted accountTypes:", formatted);
-
-                setAccountSearchTerm("");
-                setFormData((prev) => ({ ...prev, accountType: [] }));
-                console.log("🧹 Reset formData.accountType after distributor change");
-
-=======
                 setAccountSearchTerm("");
                 setFormData((prev) => ({ ...prev, accountType: [] }));
 
                 console.log("✅ All formatted accountTypes set:", formatted.length, "records");
                 console.log("🧹 Reset formData.accountType after distributor change");
 
->>>>>>> adbe71a (Updated  new feature)
             } catch (error) {
                 console.error("❌ Failed to fetch category details:", error.message);
                 setAccountTypes([]);
@@ -830,18 +781,6 @@ const RegularVisaForm = () => {
     };
 
 
-<<<<<<< HEAD
-
-
-    // compute selected names
-    // const selectedNames = accountTypes
-    //     .filter(opt => formData.accountType && formData.accountType.includes(opt.id))
-    //     .map(opt => opt.name)
-    //     .join(', ');
-
-
-=======
->>>>>>> adbe71a (Updated  new feature)
 
 
 
@@ -1212,340 +1151,8 @@ const RegularVisaForm = () => {
     // Handle export to Excel
 
 
-<<<<<<< HEAD
 
 
-
-
-
-    const submitTosku = async () => {
-        try {
-            // ✅ Skip submitting if SKU is disabled
-            if (!formData.sku) {
-                console.log('🚫 SKU submission skipped (SKU not enabled for this activity).');
-                return; // Exit early if SKU is not enabled
-            }
-
-            // Prepare rows to submit with defaults
-            const rowsToSubmit = rows.map(row => ({
-                sku: row.SKUITEM,
-                srp: parseFloat(row.SRP) || 0,
-                qty: parseInt(row.QTY, 10) || 0,
-                uom: row.UOM || 'CASE',
-                discount: parseFloat(row.DISCOUNT) || 0,
-                billing_amount: parseFloat(row.BILLING_AMOUNT) || 0,
-                regular_code: row.regularpwpcode || generateRegularCode(allRegularPwpCodes),
-                remarks: formData.remarks || '',
-            }));
-
-            if (rows.length === 1) {
-                const updatedRow = rowsToSubmit[0];
-                updatedRow.regular_code = updatedRow.regular_code || generateRegularCode(allRegularPwpCodes);
-                rowsToSubmit.push(updatedRow);
-            } else {
-                const regularCodeForTotals = rowsToSubmit[0].regular_code || 'Total:';
-                const totalsData = {
-                    sku: 'Total:',
-                    srp: totals.SRP.toFixed(2),
-                    qty: totals.QTY,
-                    uom: 'EA',
-                    discount: totals.DISCOUNT.toFixed(2),
-                    billing_amount: totals.BILLING_AMOUNT.toFixed(2),
-                    regular_code: regularCodeForTotals,
-                    remarks: formData.remarks || 'Summary of all entries',
-                };
-                rowsToSubmit.push(totalsData);
-            }
-
-            // Removed Swal loading modal here
-
-            const { data, error } = await supabase
-                .from('regular_sku_listing')
-                .insert(rowsToSubmit);
-
-            if (error) {
-                throw new Error(error.message);
-            }
-
-            Swal.fire({
-                title: 'Success!',
-                text: 'Your data has been successfully submitted to the database.',
-                icon: 'success',
-                confirmButtonText: 'Ok',
-            });
-
-        } catch (error) {
-            Swal.fire({
-                title: 'Error!',
-                text: `There was an issue submitting your data: ${error.message}`,
-                icon: 'error',
-                confirmButtonText: 'Try Again',
-            });
-        }
-    };
-
-    const submit_all = async (e) => {
-        e.preventDefault();
-
-        try {
-            // Show loading modal for 3 seconds (3000 ms)
-            await Swal.fire({
-                title: 'Submitting...',
-                html: 'Please wait while we save your data.',
-                allowOutsideClick: false,
-                didOpen: () => {
-                    Swal.showLoading();
-                },
-                timer: 3000,
-                timerProgressBar: true,
-            });
-
-            // After loading modal closes, start actual submission
-            console.log(`[${new Date().toLocaleString()}] 📝 Submitting SKUs...`);
-            await submitTosku();
-            console.log(`[${new Date().toLocaleString()}] ✅ SKUs submitted.`);
-
-            console.log(`[${new Date().toLocaleString()}] 📝 Submitting form data...`);
-            await handleSubmitFormAndAttachments();
-            console.log(`[${new Date().toLocaleString()}] ✅ Form data submitted.`);
-
-            console.log(`[${new Date().toLocaleString()}] 💾 Saving budget data to Supabase...`);
-
-            const filteredRows = rowsAccounts.filter(row =>
-                formData.accountType.includes(row.account_code)
-            );
-
-            const totalBudget = filteredRows
-                .reduce((sum, row) => sum + (parseFloat(row.budget) || 0), 0)
-                .toFixed(2);
-
-            const budgetRowsToInsert = filteredRows.map(row => ({
-                regularcode: formData.regularpwpcode,
-                account_code: row.account_code,
-                account_name: row.account_name,
-                budget: row.budget || 0,
-                created_at: row.created_at || new Date().toISOString(),
-                createform: 'ADMINISTRATOR',
-                total_budget: totalBudget,
-            }));
-
-            if (budgetRowsToInsert.length > 0) {
-                const { data, error } = await supabase
-                    .from('regular_accountlis_badget')
-                    .insert(budgetRowsToInsert);
-
-                if (error) throw error;
-
-                console.log(`[${new Date().toLocaleString()}] ✅ Budget data saved:`, data);
-            } else {
-                console.log(`[${new Date().toLocaleString()}] ℹ️ No budget rows to insert.`);
-            }
-
-            await Swal.fire({
-                title: 'Success!',
-                text: 'Your data has been successfully submitted and saved.',
-                icon: 'success',
-                confirmButtonText: 'Ok',
-            });
-
-            window.location.reload();
-
-        } catch (error) {
-            console.error(`[${new Date().toLocaleString()}] ❌ Submit All Error:`, error);
-            Swal.fire({
-                title: 'Error!',
-                text: `There was an issue submitting your data: ${error.message}`,
-                icon: 'error',
-                confirmButtonText: 'Try Again',
-            });
-        }
-    };
-
-
-
-
-    const handleSubmitFormAndAttachments = async () => {
-        try {
-            const storedUser = localStorage.getItem('loggedInUser');
-            const parsedUser = storedUser ? JSON.parse(storedUser) : null;
-            const createdBy = parsedUser?.name || 'Unknown';
-
-            if (!formData.regularpwpcode || formData.regularpwpcode.trim() === "") {
-                throw new Error("regularpwpcode is required.");
-            }
-
-            // Validate distributor
-            let distributorCode = formData.distributor?.trim() || null;
-
-            if (distributorCode) {
-                const { data: distributorsData, error: distributorError } = await supabase
-                    .from('distributors')
-                    .select('code')
-                    .eq('code', distributorCode)
-                    .single();
-
-                if (distributorError || !distributorsData) {
-                    throw new Error(`Distributor code "${distributorCode}" is invalid.`);
-                }
-            }
-
-            // Prepare budget values
-            const amountBudget = parseFloat(formData.amountbadget || 0);
-            const billingAmountSKU = rows.reduce((acc, row) => {
-                const val = parseFloat(row.BILLING_AMOUNT);
-                return acc + (isNaN(val) ? 0 : val);
-            }, 0);
-            const totalAllocatedFromAccounts = rowsAccounts.reduce(
-                (sum, row) => sum + (parseFloat(row.budget) || 0),
-                0
-            );
-
-            // ✅ Use only one source for creditBudget based on priority
-            let creditBudget = 0;
-
-            if (amountBudget > 0) {
-                creditBudget = amountBudget;
-            } else if (billingAmountSKU > 0) {
-                creditBudget = billingAmountSKU;
-            } else if (totalAllocatedFromAccounts > 0) {
-                creditBudget = totalAllocatedFromAccounts;
-            }
-
-            // Calculate remaining balance
-            const remainingBalance =
-                selectedBalance !== null ? selectedBalance - creditBudget : null;
-
-            // Prepare form submission data
-            const submissionData = {
-                ...formData,
-                distributor: distributorCode,
-                created_at: new Date().toISOString(),
-                createForm: createdBy,
-                credit_budget: creditBudget,
-                remaining_balance: remainingBalance,
-            };
-
-            // Insert form into Supabase
-            const { data: formInsertData, error: formInsertError } = await supabase
-                .from('regular_pwp')
-                .insert([submissionData])
-                .select();
-
-            if (formInsertError) {
-                throw new Error(`Form Insert failed: ${formInsertError.message}`);
-            }
-
-            // Insert attachments (if any)
-            await Promise.all(
-                files.map(async (file) => {
-                    const { name, type, size } = file;
-
-                    const attachmentPayload = {
-                        regularpwpcode: formData.regularpwpcode,
-                        filename: name,
-                        mimetype: type,
-                        size: size,
-                    };
-
-                    const { error: attachmentError } = await supabase
-                        .from('regular_attachments')
-                        .insert([attachmentPayload])
-                        .select();
-
-                    if (attachmentError) {
-                        throw new Error(`Attachment insert failed for ${name}: ${attachmentError.message}`);
-                    }
-                })
-            );
-
-            // ✅ Reset everything after success
-            setFiles([]);
-            setRows([]);           // <-- Make sure you have setRows in your state
-            setRowsAccounts([]);   // <-- Same here
-            setFormData({
-                regularpwpcode: "",
-                accountType: [],
-                categoryCode: [],
-                categoryName: [],
-                activity: "",
-                pwptype: "Regular",
-                notification: false,
-                objective: "",
-                promoScheme: "",
-                activityDurationFrom: new Date().toISOString().split('T')[0],
-                activityDurationTo: new Date().toISOString().split('T')[0],
-                isPartOfCoverPwp: false,
-                coverPwpCode: "",
-                distributor: "",
-                amountbadget: "0",
-                categoryCode: "",
-                sku: null,
-                accounts: null,
-                amount_display: null,
-            });
-
-            // Optional: show success toast
-            // toast.success("Form submitted successfully");
-
-        } catch (error) {
-            // Handle and show error to the user
-            console.error("Submission Error:", error.message);
-            alert(error.message); // Replace with a toast/snackbar if available
-        }
-    };
-
-
-
-
-
-    const saveRecentActivity = async ({ UserId }) => {
-        try {
-            // 1. Get public IP
-            const ipRes = await fetch('https://api.ipify.org?format=json');
-            const { ip } = await ipRes.json();
-
-            // 2. Get geolocation info
-            const geoRes = await fetch(`https://ipapi.co/${ip}/json/`);
-            const geo = await geoRes.json();
-
-            // 3. Build activity entry
-            const activity = {
-                Device: navigator.userAgent || 'Unknown Device',
-                Location: `${geo.city || 'Unknown'}, ${geo.region || 'Unknown'}, ${geo.country_name || 'Unknown'}`,
-                IP: ip,
-                Time: new Date().toISOString(),
-                Action: 'Create Form Regular PWP',
-            };
-
-            // 4. Save to Supabase only
-            const { error } = await supabase
-                .from('RecentActivity')
-                .insert([{
-                    userId: UserId,
-                    device: activity.Device,
-                    location: activity.Location,
-                    ip: activity.IP,
-                    time: activity.Time,
-                    action: activity.Action
-                }]);
-
-            if (error) {
-                console.error('❌ Supabase insert error:', error.message);
-            } else {
-                console.log('✅ Activity saved to Supabase');
-            }
-
-        } catch (err) {
-            console.error('❌ Failed to log activity:', err.message || err);
-        }
-    };
-
-
-    // Only update rows when categories change, NOT when accounts change
-=======
-
-
->>>>>>> adbe71a (Updated  new feature)
     const handleCategoryChange = (cat, isSelected) => {
         setFormData((prevData) => {
             let newCodes = [...(prevData.categoryCode || [])];
@@ -1727,8 +1334,6 @@ const RegularVisaForm = () => {
     const currentUser = JSON.parse(localStorage.getItem('loggedInUser'));
     const currentUserName = currentUser?.name?.toLowerCase().trim() || "";
     const role = currentUser?.role || "";
-<<<<<<< HEAD
-=======
 
 
 
@@ -2436,7 +2041,6 @@ const RegularVisaForm = () => {
     };
 
     const [message, setMessage] = useState("");
->>>>>>> adbe71a (Updated  new feature)
 
     const renderStepContent = () => {
         switch (step) {
@@ -3416,11 +3020,7 @@ const RegularVisaForm = () => {
                                                                     })
                                                                     : "-"}
                                                             </div>
-<<<<<<< HEAD
-                                                     
-=======
 
->>>>>>> adbe71a (Updated  new feature)
                                                         </li>
                                                     );
                                                 })}
@@ -4021,186 +3621,8 @@ const RegularVisaForm = () => {
                                         </div>
                                     </div>
                                 ) : (
-<<<<<<< HEAD
-                                    <div style={{ overflowX: 'auto' }}>
-                                        <Table bordered hover responsive className="align-middle text-center">
-                                            <thead className="bg-primary text-white">
-                                                <tr>
-                                                    <th>SKU</th>
-                                                    <th>SRP</th>
-                                                    <th>QTY</th>
-                                                    <th>UOM</th>
-                                                    <th>DISCOUNT</th>
-                                                    <th>BILLING AMOUNT</th>
-                                                    {/* <th>Actions</th> */}
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {rows.map((row, idx) => (
-                                                    <tr key={row.SKUITEM || idx}>
-                                                        <td style={{ display: 'flex', alignItems: 'center' }}>
-                                                            <Form.Control
-                                                                value={
-                                                                    categoryListing.find(sku => sku.sku_code === row.SKUITEM)
-                                                                        ? `${row.SKUITEM} - ${categoryListing.find(sku => sku.sku_code === row.SKUITEM)?.name}`
-                                                                        : row.SKUITEM
-                                                                }
-                                                                onChange={e => handleChangesku(idx, 'SKUITEM', e.target.value)}
-                                                                readOnly
-                                                            />
-
-
-
-
-
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    setSelectedRowIndex(idx);
-                                                                    setShowSkuModal(true);
-                                                                }}
-
-                                                                style={{
-                                                                    border: "none",
-                                                                    background: "none",
-                                                                    cursor: "pointer",
-                                                                    padding: "8px",
-                                                                    color: "#d32f2f",
-                                                                    transition: "transform 0.3s ease, box-shadow 0.3s ease",
-                                                                    boxShadow: "0 4px 6px rgba(0,0,0,0.2)",
-                                                                    borderRadius: "8px",
-                                                                    display: "inline-flex",
-                                                                    alignItems: "center",
-                                                                    justifyContent: "center",
-                                                                    marginLeft: "8px",
-                                                                    outline: "none",
-                                                                }}
-                                                                onMouseEnter={(e) => {
-                                                                    e.currentTarget.style.transform = "scale(1.1) rotateX(10deg) rotateY(10deg)";
-                                                                    e.currentTarget.style.boxShadow = "0 8px 15px rgba(211, 47, 47, 0.7)";
-                                                                }}
-                                                                onMouseLeave={(e) => {
-                                                                    e.currentTarget.style.transform = "scale(1) rotateX(0) rotateY(0)";
-                                                                    e.currentTarget.style.boxShadow = "0 4px 6px rgba(0,0,0,0.2)";
-                                                                }}
-                                                                onMouseDown={(e) => {
-                                                                    e.currentTarget.style.transform = "scale(0.95) rotateX(5deg) rotateY(5deg)";
-                                                                    e.currentTarget.style.boxShadow = "0 2px 4px rgba(0,0,0,0.3)";
-                                                                }}
-                                                                onMouseUp={(e) => {
-                                                                    e.currentTarget.style.transform = "scale(1.1) rotateX(10deg) rotateY(10deg)";
-                                                                    e.currentTarget.style.boxShadow = "0 8px 15px rgba(211, 0, 0, 0.7)";
-                                                                }}
-                                                            >
-                                                                <FaSearch style={{ color: "blue", fontSize: "20px" }} />
-                                                            </button>
-                                                        </td>
-
-
-
-                                                        <td>
-                                                            <Form.Control
-                                                                type="number"
-                                                                step="0.01"
-                                                                value={row.SRP || ''}
-                                                                onChange={e => handleChangesku(idx, 'SRP', e.target.value)}
-                                                            />
-                                                        </td>
-                                                        <td>
-                                                            <Form.Control
-                                                                type="number"
-                                                                value={row.QTY || ''}
-                                                                onChange={e => handleChangesku(idx, 'QTY', e.target.value)}
-                                                            />
-                                                        </td>
-                                                        <td>
-                                                            <Form.Select
-                                                                value={row.UOM || ''}
-                                                                onChange={e => handleChangesku(idx, 'UOM', e.target.value)}
-                                                            >
-                                                                {UOM_OPTIONS.map(opt => (
-                                                                    <option key={opt} value={opt}>{opt}</option>
-                                                                ))}
-                                                            </Form.Select>
-                                                        </td>
-                                                        <td>
-                                                            <Form.Control
-                                                                type="number"
-                                                                step="0.01"
-                                                                value={row.DISCOUNT || ''}
-                                                                onChange={e => handleChangesku(idx, 'DISCOUNT', e.target.value)}
-                                                            />
-                                                        </td>
-                                                        <td>
-                                                            <Form.Control
-                                                                type="number"
-                                                                step="0.01"
-                                                                value={row.BILLING_AMOUNT || ''}
-                                                                onChange={e => handleChangesku(idx, 'BILLING_AMOUNT', e.target.value)}
-                                                            />
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-
-
-
-
-                                            {/* Footer with totals */}
-                                            <tfoot>
-                                                <tr>
-                                                    <th>Total</th>
-                                                    <th>{(parseFloat(totals?.SRP || 0)).toFixed(2)}</th>
-                                                    <th>{totals?.QTY || 0}</th>
-                                                    <th>
-                                                        {UOM_OPTIONS.map(opt => (
-                                                            <div key={opt} style={{ fontSize: '0.8rem', lineHeight: '1.2' }}>
-                                                                {opt}: {totals?.UOMCount?.[opt] || 0}
-                                                            </div>
-                                                        ))}
-                                                    </th>
-                                                    <th>{(parseFloat(totals?.DISCOUNT || 0)).toFixed(2)}</th>
-
-                                                    {/* Billing SKU Amount */}
-                                                    <th>
-                                                        {(() => {
-                                                            const billingAmountSKU = rows.reduce((acc, row) => {
-                                                                const val = parseFloat(row.BILLING_AMOUNT);
-                                                                return acc + (isNaN(val) ? 0 : val);
-                                                            }, 0);
-                                                            return billingAmountSKU.toFixed(2);
-                                                        })()}
-                                                    </th>
-
-                                                    {/* Remaining SKU Budget */}
-                                                    <th>
-                                                        {(() => {
-                                                            const selected = parseFloat(selectedBalance || 0);
-                                                            const billingSkuAmount = rows.reduce((acc, row) => {
-                                                                const val = parseFloat(row.BILLING_AMOUNT);
-                                                                return acc + (isNaN(val) ? 0 : val);
-                                                            }, 0);
-                                                            const creditBudget = parseFloat(formData?.amountbadget || 0);
-
-                                                            const remainingSkuBudget = selected - billingSkuAmount - creditBudget;
-
-                                                            return remainingSkuBudget.toLocaleString('en-PH', {
-                                                                minimumFractionDigits: 2,
-                                                                maximumFractionDigits: 2,
-                                                            });
-                                                        })()}
-                                                    </th>
-                                                </tr>
-                                            </tfoot>
-
-
-
-
-                                        </Table>
-=======
                                     <div className="text-center p-4 bg-light rounded">
                                         <p className="text-muted mb-0">Please select an account to manage SKU listings</p>
->>>>>>> adbe71a (Updated  new feature)
                                     </div>
                                 )}
                             </Card.Body>

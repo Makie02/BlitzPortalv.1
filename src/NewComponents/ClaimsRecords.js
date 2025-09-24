@@ -140,176 +140,98 @@ const convertCodeToText = useCallback((code, type, accountTypesMap, distributors
   }, []);
 
   // Main fetch function
-// Main fetch function
+
 const fetchData = useCallback(async () => {
   try {
     setLoading(true);
     setError(null);
 
-    // ✅ Helper: fetch large tables in chunks
-    const fetchAllRows = async (table, columns, chunkSize = 10000) => {
-      let allData = [];
-      let from = 0;
-      let moreData = true;
-
-      while (moreData) {
-        const { data, error } = await supabase
-          .from(table)
-          .select(columns)
-          .range(from, from + chunkSize - 1);
-
-        if (error) throw error;
-
-        if (data && data.length > 0) {
-          allData = [...allData, ...data];
-          from += chunkSize;
-        } else {
-          moreData = false;
-        }
-      }
-
-      console.log(`✅ ${table}: ${allData.length} rows loaded`);
-      return allData;
-    };
-
-    // ✅ Fetch all data in parallel
-    const [distributorsData, accountTypesData, claimsResult] = await Promise.all([
-      fetchAllRows("distributors", "code, name"),
-      fetchAllRows("categorydetails", "code, name"),
-      supabase
-        .from("Claims_pwp")
-        .select(CLAIMS_COLUMNS.join(','))
-        .order("id", { ascending: false })
-        .limit(100)
+    const [distributorsResult, claimsResult] = await Promise.all([
+      supabase.from("distributors").select("code, name"),
+      supabase.from("Claims_pwp").select(CLAIMS_COLUMNS.join(',')).order("id", { ascending: false }).limit(100)
     ]);
 
+    if (distributorsResult.error) throw distributorsResult.error;
     if (claimsResult.error) throw claimsResult.error;
 
-    // ✅ Build maps
+    // Step 1 — Kunin ang lahat ng needed account_types codes mula sa claims
+    const neededAccountTypeCodes = new Set();
+    (claimsResult.data || []).forEach(item => {
+      if (item.account_types) {
+        if (typeof item.account_types === "string" && item.account_types.includes("[")) {
+          try {
+            const codes = JSON.parse(item.account_types.replace(/'/g, '"'));
+            codes.forEach(code => neededAccountTypeCodes.add(code.trim()));
+          } catch (innerErr) {
+            console.error("Error parsing account_types:", innerErr);
+            const matches = item.account_types.match(/[A-Z0-9]+/g);
+            if (matches) matches.forEach(code => neededAccountTypeCodes.add(code.trim()));
+          }
+        } else {
+          neededAccountTypeCodes.add(item.account_types.trim());
+        }
+      }
+    });
+
+    // Step 2 — Fetch only those account_types from categorydetails
+    const { data: accountTypesData, error: accountTypesError } = await supabase
+      .from("categorydetails")
+      .select("code, name")
+      .in("code", Array.from(neededAccountTypeCodes));
+
+    if (accountTypesError) throw accountTypesError;
+
+    // Step 3 — Build maps
     const distributorsMap = new Map();
     const accountTypesMap = new Map();
 
-    distributorsData.forEach(distributor => {
+    distributorsResult.data?.forEach(distributor => {
       distributorsMap.set(distributor.code.toString(), distributor.name);
     });
 
-    accountTypesData.forEach(accountType => {
-      accountTypesMap.set(accountType.code.toString().trim().toUpperCase(), accountType.name);
+    accountTypesData?.forEach(accountType => {
+      accountTypesMap.set(accountType.code.toString().trim(), accountType.name);
     });
 
-    console.log("✅ Account Types Map size:", accountTypesMap.size);
-    console.log("📦 Claims Sample account_types:", claimsResult.data?.[0]?.account_types);
+    console.log("✅ Account Types Map:", Array.from(accountTypesMap.entries()));
 
-    // ✅ Process claims data
-    const processedData = (claimsResult.data || []).map((item) => {
-      let accountTypesText = "-";
-
-      if (Array.isArray(item.account_types)) {
-        accountTypesText = item.account_types
-          .map(code => accountTypesMap.get(code?.toString().trim().toUpperCase()) || `Unknown (${code})`)
-          .join(", ");
-      } else if (typeof item.account_types === "string") {
-        try {
-          const parsed = JSON.parse(item.account_types.replace(/'/g, '"'));
-          if (Array.isArray(parsed)) {
-            accountTypesText = parsed
-              .map(code => accountTypesMap.get(code?.toString().trim().toUpperCase()) || `Unknown (${code})`)
-              .join(", ");
+    // Step 4 — Process claims
+    const processedData = (claimsResult.data || []).map((item) => ({
+      ...filterColumns(item, CLAIMS_COLUMNS),
+      source: "Claims_pwp",
+      code_pwp: item.code_pwp || item.code || item.claim_code,
+      distributor_text: convertCodeToText(item.distributor, 'distributor', accountTypesMap, distributorsMap),
+      account_types_text: (() => {
+        let codes = [];
+        if (typeof item.account_types === "string" && item.account_types.includes("[")) {
+          try {
+            codes = JSON.parse(item.account_types.replace(/'/g, '"'));
+          } catch (innerErr) {
+            console.error("Error parsing account_types in map:", innerErr);
+            const matches = item.account_types.match(/[A-Z0-9]+/g);
+            if (matches) codes = matches;
           }
-        } catch {
-          const clean = item.account_types.toString().trim().toUpperCase();
-          accountTypesText = accountTypesMap.get(clean) || `Unknown (${clean})`;
+        } else {
+          codes = [item.account_types];
         }
-      }
-
-      return {
-        ...filterColumns(item, CLAIMS_COLUMNS),
-        source: "Claims_pwp",
-        code_pwp: item.code_pwp || item.code || item.claim_code,
-        distributor_text: distributorsMap.get(item.distributor?.toString().trim()) || `Unknown Distributor (${item.distributor})`,
-        account_types_text: accountTypesText
-      };
-    });
-
-    // ✅ Get approval status
-    const allPwpCodes = processedData.map(item => item.code_pwp).filter(code => code);
-    const approvalStatusMap = await getApprovalStatus(allPwpCodes);
-
-    // ✅ Add approval status
-    let dataWithApprovalStatus = processedData.map(item => ({
-      ...item,
-      approval_status: approvalStatusMap[item.code_pwp]?.status || 'Pending',
-      date_responded: approvalStatusMap[item.code_pwp]?.date_responded,
-      approval_created: approvalStatusMap[item.code_pwp]?.approval_created
+        return codes
+          .map(code => accountTypesMap.get(code?.toString().trim()) || `Unknown (${code})`)
+          .join(", ");
+      })()
     }));
 
-    // ✅ Apply filters (search, status, date)
-    if (searchQuery) {
-      dataWithApprovalStatus = dataWithApprovalStatus.filter(item => {
-        const searchFields = [
-          item.code_pwp,
-          item.id,
-          item.account_types_text,
-          item.distributor_text,
-          item.created_at,
-          item.createForm
-        ];
-        return searchFields.some(field =>
-          field && field.toString().toLowerCase().includes(searchQuery.toLowerCase())
-        );
-      });
-    }
-
-    if (statusFilter !== "all") {
-      dataWithApprovalStatus = dataWithApprovalStatus.filter(item => {
-        const itemStatus = item.approval_status ? item.approval_status.toLowerCase() : 'pending';
-        if (statusFilter === "sent_back") {
-          return itemStatus === "sent back for revision" || itemStatus === "sent back";
-        }
-        if (statusFilter === "cancelled") {
-          return itemStatus === "cancelled";
-        }
-        if (statusFilter === "pending") {
-          return itemStatus === "pending" || !item.approval_status;
-        }
-        if (statusFilter === "approved") {
-          return itemStatus === "approved";
-        }
-        if (statusFilter === "declined") {
-          return itemStatus === "declined";
-        }
-        return itemStatus === statusFilter;
-      });
-    }
-
-    if (dateFrom) {
-      dataWithApprovalStatus = dataWithApprovalStatus.filter(item => {
-        if (!item.created_at) return false;
-        const itemDate = new Date(item.created_at);
-        const fromDate = new Date(dateFrom);
-        return itemDate >= fromDate;
-      });
-    }
-
-    if (dateTo) {
-      dataWithApprovalStatus = dataWithApprovalStatus.filter(item => {
-        if (!item.created_at) return false;
-        const itemDate = new Date(item.created_at);
-        const toDate = new Date(dateTo);
-        toDate.setHours(23, 59, 59, 999);
-        return itemDate <= toDate;
-      });
-    }
-
     setColumns(CLAIMS_COLUMNS);
-    setData(dataWithApprovalStatus);
+    setData(processedData);
     setCurrentPage(1);
+
   } catch (err) {
-    setError(`Unexpected error: ${err.message}`);
+    console.error("❌ fetchData error:", err);
+    setError(`Unexpected error: ${err?.message || err}`);
   } finally {
     setLoading(false);
   }
-}, [CLAIMS_COLUMNS, statusFilter, searchQuery, dateFrom, dateTo, filterColumns, getApprovalStatus]);
+}, [CLAIMS_COLUMNS, filterColumns, convertCodeToText]);
+
 
   // Event handlers
   const handleViewRecord = useCallback((record) => {

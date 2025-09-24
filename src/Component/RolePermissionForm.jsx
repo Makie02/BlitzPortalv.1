@@ -8,8 +8,7 @@ const roleCategories = [
   "ApprovalsPage", "ApprovalHistoryTable", "References", "UserManagement",
   "BrandSelector", "BrandApprovalForm", "Activities", "RecordsPage",
   "ApprovalList", "ManageMarketing", "Calendar", "LoginPage", "AnnouncementForm",
-  "RentalsForm", "AddendumCancellation", "ClaimsStatusUpload" ,"Claims_pwp","ClaimsRecords"
-  
+  "RentalsForm", "AddendumCancellation", "ClaimsStatusUpload" ,"Claims_pwp" ,"ClaimsRecords"
 ];
 
 export default function RolePermissionForm({ onSubmit }) {

@@ -342,16 +342,9 @@ function App() {
   }, [loggedInUser?.PermissionRole]);
 
   // Show NotFoundPage if no critical data
-<<<<<<< HEAD
-if (loggedInUser && noDataFound && currentView !== 'LoginPage') {
-  return <NotFoundPage setCurrentView={setCurrentView} />;
-}
-=======
   if (loggedInUser && noDataFound && currentView !== 'LoginPage') {
     return <NotFoundPage setCurrentView={setCurrentView} />;
   }
-
->>>>>>> adbe71a (Updated  new feature)
 
 
 

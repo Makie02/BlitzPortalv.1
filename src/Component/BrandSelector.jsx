@@ -3,10 +3,7 @@ import { FaEdit, FaTrash } from "react-icons/fa";
 import { supabase } from "../supabaseClient";
 import Swal from "sweetalert2";
 import "./BrandSelector.css";
-<<<<<<< HEAD
-=======
 import * as XLSX from "xlsx";
->>>>>>> adbe71a (Updated  new feature)
 
 function CategorySelector() {
   const [selectedDistributor, setSelectedDistributor] = useState(null);
@@ -16,12 +13,8 @@ function CategorySelector() {
   const [formData, setFormData] = useState({ code: "", name: "", description: "" });
   const [distributorNames, setDistributorNames] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
-<<<<<<< HEAD
-  const [searchCategory, setSearchCategory] = useState(""); // New state for category search
-=======
   const [searchCategory, setSearchCategory] = useState("");
   const fileInputRef = useRef(null);
->>>>>>> adbe71a (Updated  new feature)
 
   useEffect(() => {
     let isMounted = true;
@@ -52,11 +45,7 @@ function CategorySelector() {
   );
 
   const filteredCategories = categoryDetails.filter(({ name }) =>
-<<<<<<< HEAD
-    name.toLowerCase().includes(searchCategory.toLowerCase()) // Filter categories based on search term
-=======
     name.toLowerCase().includes(searchCategory.toLowerCase())
->>>>>>> adbe71a (Updated  new feature)
   );
 
   const handleClick = async (distributor) => {
@@ -66,11 +55,7 @@ function CategorySelector() {
 
     const { data, error } = await supabase
       .from("categorydetails")
-<<<<<<< HEAD
-      .select("code, name, description")  // remove id, use code
-=======
       .select("code, name, description")
->>>>>>> adbe71a (Updated  new feature)
       .eq("principal_id", distributor.id);
 
     if (error) {
@@ -91,11 +76,7 @@ function CategorySelector() {
     try {
       const { data, error } = await supabase
         .from("categorydetails")
-<<<<<<< HEAD
-        .select("code, name, description")  // fetch code instead of id
-=======
         .select("code, name, description")
->>>>>>> adbe71a (Updated  new feature)
         .eq("principal_id", distributorId);
 
       if (error) throw error;
@@ -139,31 +120,18 @@ function CategorySelector() {
 
     try {
       if (formData.code) {
-<<<<<<< HEAD
-        // === UPDATE ===
-=======
         // UPDATE
->>>>>>> adbe71a (Updated  new feature)
         const { error } = await supabase
           .from("categorydetails")
           .update({
             name: formData.name,
             description: formData.description || null,
           })
-<<<<<<< HEAD
-          .eq("code", formData.code);  // use code instead of id
-
-        if (error) throw error;
-      } else {
-        // === INSERT ===
-        // Generate smart sequential code
-=======
           .eq("code", formData.code);
 
         if (error) throw error;
       } else {
         // INSERT
->>>>>>> adbe71a (Updated  new feature)
         const { data: existingCodes, error: fetchError } = await supabase
           .from("categorydetails")
           .select("code")
@@ -175,15 +143,9 @@ function CategorySelector() {
 
         let nextCode = "A00001";
         if (existingCodes.length > 0) {
-<<<<<<< HEAD
-          const lastCode = existingCodes[0].code; // e.g., A00057
-          const numericPart = parseInt(lastCode.slice(1)) + 1; // 58
-          nextCode = `A${numericPart.toString().padStart(5, "0")}`; // A00058
-=======
           const lastCode = existingCodes[0].code;
           const numericPart = parseInt(lastCode.slice(1)) + 1;
           nextCode = `A${numericPart.toString().padStart(5, "0")}`;
->>>>>>> adbe71a (Updated  new feature)
         }
 
         const { error } = await supabase
@@ -238,11 +200,7 @@ function CategorySelector() {
         const { error } = await supabase
           .from("categorydetails")
           .delete()
-<<<<<<< HEAD
-          .eq("code", code);  // use code for deletion
-=======
           .eq("code", code);
->>>>>>> adbe71a (Updated  new feature)
 
         if (error) throw error;
 
@@ -476,15 +434,9 @@ const handleImportFile = async (event) => {
               width: "100%",
               padding: "8px",
               fontSize: "14px",
-<<<<<<< HEAD
-         
-              borderRadius: "6px",
-              border: "1px solid #ccc",
-=======
               borderRadius: "6px",
               border: "1px solid #ccc",
               marginTop: 10,
->>>>>>> adbe71a (Updated  new feature)
             }}
           />
           <div style={tableWrapperStyle}>
@@ -497,10 +449,6 @@ const handleImportFile = async (event) => {
                 </tr>
               </thead>
               <tbody>
-<<<<<<< HEAD
-
-=======
->>>>>>> adbe71a (Updated  new feature)
                 {filteredCategories.length === 0 ? (
                   <tr>
                     <td style={{ ...tdStyle, textAlign: "center" }} colSpan={3}>
