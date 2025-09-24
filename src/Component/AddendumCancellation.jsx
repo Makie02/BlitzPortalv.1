@@ -142,165 +142,165 @@ export default function AddendumCancellation({ cover_code }) {
   }, [selectedVisa?.visaCode, selectedVisa?.type]);
 
 
-const cancelAddendum = async () => {
-  if (!selectedVisa) {
-    console.log("No selectedVisa found. Exiting cancelAddendum.");
-    return;
-  }
+  const cancelAddendum = async () => {
+    if (!selectedVisa) {
+      console.log("No selectedVisa found. Exiting cancelAddendum.");
+      return;
+    }
 
-  console.log("Starting cancellation process for:", selectedVisa);
+    console.log("Starting cancellation process for:", selectedVisa);
 
-  // Step: Update remaining balance if applicable
-  if (selectedVisa.coverPwpCode && selectedVisa.credit_budget != null) {
+    // Step: Update remaining balance if applicable
+    if (selectedVisa.coverPwpCode && selectedVisa.credit_budget != null) {
+      try {
+        const { data: budgetRows, error: fetchError } = await supabase
+          .from("amount_badget")
+          .select("id, remainingbalance")
+          .eq("pwp_code", selectedVisa.coverPwpCode)
+          .limit(1)
+          .maybeSingle();
+
+        if (fetchError) {
+          console.error("Error fetching amount_badget:", fetchError.message);
+        } else if (budgetRows) {
+          const currentBalance = Number(budgetRows.remainingbalance || 0);
+          const amountToAdd = Number(selectedVisa.credit_budget || 0);
+          const newBalance = currentBalance + amountToAdd;
+
+          const { error: updateBudgetError } = await supabase
+            .from("amount_badget")
+            .update({ remainingbalance: newBalance })
+            .eq("id", budgetRows.id);
+
+          if (updateBudgetError) {
+            console.error("Error updating remaining balance:", updateBudgetError.message);
+          } else {
+            console.log(`✅ Updated Remaining Balance: PHP ${newBalance.toLocaleString()}`);
+          }
+        } else {
+          console.warn("No matching pwp_code found in amount_badget for:", selectedVisa.coverPwpCode);
+        }
+      } catch (e) {
+        console.error("Error handling amount_badget update:", e.message);
+      }
+    }
+
+    setCancelling(true);
+    setError(null);
+    setSuccessMsg(null);
+    setShowMsg(false);
+
     try {
-      const { data: budgetRows, error: fetchError } = await supabase
-        .from("amount_badget")
-        .select("id, remainingbalance")
-        .eq("pwp_code", selectedVisa.coverPwpCode)
+      const currentUser = JSON.parse(localStorage.getItem("loggedInUser"));
+      const approverId = currentUser?.UserID || "unknown";
+      const now = new Date().toISOString();
+
+      const pwpCodeToUse = selectedVisa.regularpwpcode || selectedVisa.cover_code;
+      if (!pwpCodeToUse) {
+        setError("No valid PwpCode to cancel.");
+        setShowMsg(true);
+        setCancelling(false);
+        return;
+      }
+
+      // Step: Check if Approval_History already exists for this PwpCode
+      const { data: existingApproval, error: fetchApprovalError } = await supabase
+        .from("Approval_History")
+        .select("*")
+        .eq("PwpCode", pwpCodeToUse)
         .limit(1)
         .maybeSingle();
 
-      if (fetchError) {
-        console.error("Error fetching amount_badget:", fetchError.message);
-      } else if (budgetRows) {
-        const currentBalance = Number(budgetRows.remainingbalance || 0);
-        const amountToAdd = Number(selectedVisa.credit_budget || 0);
-        const newBalance = currentBalance + amountToAdd;
+      if (fetchApprovalError) {
+        console.error("Error checking Approval_History:", fetchApprovalError.message);
+        setError("Failed to check approval history: " + fetchApprovalError.message);
+        setShowMsg(true);
+        setCancelling(false);
+        return;
+      }
 
-        const { error: updateBudgetError } = await supabase
-          .from("amount_badget")
-          .update({ remainingbalance: newBalance })
-          .eq("id", budgetRows.id);
+      if (existingApproval) {
+        // Record exists: UPDATE it
+        const { error: updateError } = await supabase
+          .from("Approval_History")
+          .update({
+            ApproverId: approverId,
+            DateResponded: now,
+            Response: "Cancelled",
+            Type: "Cancellation",
+            Notication: false,
+          })
+          .eq("PwpCode", pwpCodeToUse);
 
-        if (updateBudgetError) {
-          console.error("Error updating remaining balance:", updateBudgetError.message);
-        } else {
-          console.log(`✅ Updated Remaining Balance: PHP ${newBalance.toLocaleString()}`);
+        if (updateError) {
+          console.error("Error updating Approval_History:", updateError.message);
+          setError("Failed to update cancellation: " + updateError.message);
+          setShowMsg(true);
+          setCancelling(false);
+          return;
         }
+
+        console.log("✅ Approval_History updated successfully.");
       } else {
-        console.warn("No matching pwp_code found in amount_badget for:", selectedVisa.coverPwpCode);
+        // No record: INSERT new cancellation record
+        const { error: insertError } = await supabase
+          .from("Approval_History")
+          .insert([{
+            PwpCode: pwpCodeToUse,
+            ApproverId: approverId,
+            DateResponded: now,
+            Response: "Cancelled",
+            Type: "Cancellation",
+            Notication: false,
+          }]);
+
+        if (insertError) {
+          console.error("Error inserting into Approval_History:", insertError.message);
+          setError("Failed to insert cancellation: " + insertError.message);
+          setShowMsg(true);
+          setCancelling(false);
+          return;
+        }
+
+        console.log("✅ Approval_History inserted successfully.");
       }
+
+      setSuccessMsg("Addendum cancellation recorded successfully.");
+      setShowMsg(true);
+      setIsCancelled(true);
+
+      // Log to RecentActivity
+      try {
+        const ipRes = await fetch("https://api.ipify.org?format=json");
+        const { ip } = await ipRes.json();
+
+        const geoRes = await fetch(`https://ipapi.co/${ip}/json/`);
+        const geo = await geoRes.json();
+
+        const activityLog = {
+          userId: approverId,
+          device: navigator.userAgent || "Unknown Device",
+          location: `${geo.city}, ${geo.region}, ${geo.country_name}`,
+          ip,
+          time: now,
+          action: `Cancelled addendum for ${selectedVisa.visaCode}`,
+        };
+
+        await supabase.from("RecentActivity").insert(activityLog);
+        console.log("📝 Activity logged successfully.");
+      } catch (activityCatch) {
+        console.warn("⚠️ Activity logging error:", activityCatch.message);
+      }
+
     } catch (e) {
-      console.error("Error handling amount_badget update:", e.message);
-    }
-  }
-
-  setCancelling(true);
-  setError(null);
-  setSuccessMsg(null);
-  setShowMsg(false);
-
-  try {
-    const currentUser = JSON.parse(localStorage.getItem("loggedInUser"));
-    const approverId = currentUser?.UserID || "unknown";
-    const now = new Date().toISOString();
-
-    const pwpCodeToUse = selectedVisa.regularpwpcode || selectedVisa.cover_code;
-    if (!pwpCodeToUse) {
-      setError("No valid PwpCode to cancel.");
+      console.error("General error in cancelAddendum:", e.message);
+      setError("An error occurred: " + e.message);
       setShowMsg(true);
-      setCancelling(false);
-      return;
     }
 
-    // Step: Check if Approval_History already exists for this PwpCode
-    const { data: existingApproval, error: fetchApprovalError } = await supabase
-      .from("Approval_History")
-      .select("*")
-      .eq("PwpCode", pwpCodeToUse)
-      .limit(1)
-      .maybeSingle();
-
-    if (fetchApprovalError) {
-      console.error("Error checking Approval_History:", fetchApprovalError.message);
-      setError("Failed to check approval history: " + fetchApprovalError.message);
-      setShowMsg(true);
-      setCancelling(false);
-      return;
-    }
-
-    if (existingApproval) {
-      // Record exists: UPDATE it
-      const { error: updateError } = await supabase
-        .from("Approval_History")
-        .update({
-          ApproverId: approverId,
-          DateResponded: now,
-          Response: "Cancelled",
-          Type: "Cancellation",
-          Notication: false,
-        })
-        .eq("PwpCode", pwpCodeToUse);
-
-      if (updateError) {
-        console.error("Error updating Approval_History:", updateError.message);
-        setError("Failed to update cancellation: " + updateError.message);
-        setShowMsg(true);
-        setCancelling(false);
-        return;
-      }
-
-      console.log("✅ Approval_History updated successfully.");
-    } else {
-      // No record: INSERT new cancellation record
-      const { error: insertError } = await supabase
-        .from("Approval_History")
-        .insert([{
-          PwpCode: pwpCodeToUse,
-          ApproverId: approverId,
-          DateResponded: now,
-          Response: "Cancelled",
-          Type: "Cancellation",
-          Notication: false,
-        }]);
-
-      if (insertError) {
-        console.error("Error inserting into Approval_History:", insertError.message);
-        setError("Failed to insert cancellation: " + insertError.message);
-        setShowMsg(true);
-        setCancelling(false);
-        return;
-      }
-
-      console.log("✅ Approval_History inserted successfully.");
-    }
-
-    setSuccessMsg("Addendum cancellation recorded successfully.");
-    setShowMsg(true);
-    setIsCancelled(true);
-
-    // Log to RecentActivity
-    try {
-      const ipRes = await fetch("https://api.ipify.org?format=json");
-      const { ip } = await ipRes.json();
-
-      const geoRes = await fetch(`https://ipapi.co/${ip}/json/`);
-      const geo = await geoRes.json();
-
-      const activityLog = {
-        userId: approverId,
-        device: navigator.userAgent || "Unknown Device",
-        location: `${geo.city}, ${geo.region}, ${geo.country_name}`,
-        ip,
-        time: now,
-        action: `Cancelled addendum for ${selectedVisa.visaCode}`,
-      };
-
-      await supabase.from("RecentActivity").insert(activityLog);
-      console.log("📝 Activity logged successfully.");
-    } catch (activityCatch) {
-      console.warn("⚠️ Activity logging error:", activityCatch.message);
-    }
-
-  } catch (e) {
-    console.error("General error in cancelAddendum:", e.message);
-    setError("An error occurred: " + e.message);
-    setShowMsg(true);
-  }
-
-  setCancelling(false);
-  console.log("Cancellation process complete.");
-};
+    setCancelling(false);
+    console.log("Cancellation process complete.");
+  };
 
 
 
@@ -556,7 +556,50 @@ const cancelAddendum = async () => {
       Swal.fire("Cancelled", "The visa was not deleted.", "info");
     }
   };
+  const [distributorName, setDistributorName] = useState("N/A");
 
+  useEffect(() => {
+    const fetchDistributorName = async () => {
+      try {
+        if (selectedVisa?.distributor_code) {
+          // ✅ If distributor_code exists, search by code
+          const { data, error } = await supabase
+            .from("distributors")
+            .select("name")
+            .eq("code", selectedVisa.distributor_code)
+            .single();
+
+          if (error || !data) {
+            console.error("Error fetching distributor by code:", error);
+            setDistributorName("N/A");
+          } else {
+            setDistributorName(data.name);
+          }
+        } else if (selectedVisa?.distributor) {
+          // ✅ If distributor is an ID (like 13), search by ID
+          const { data, error } = await supabase
+            .from("distributors")
+            .select("name")
+            .eq("id", selectedVisa.distributor) // use ID match
+            .maybeSingle();
+
+          if (error || !data) {
+            console.warn("No match, fallback:", selectedVisa.distributor);
+            setDistributorName(selectedVisa.distributor.toString());
+          } else {
+            setDistributorName(data.name);
+          }
+        } else {
+          setDistributorName("N/A");
+        }
+      } catch (err) {
+        console.error("Unexpected error:", err);
+        setDistributorName("N/A");
+      }
+    };
+
+    fetchDistributorName();
+  }, [selectedVisa?.distributor_code, selectedVisa?.distributor]);
 
 
 
@@ -729,11 +772,33 @@ const cancelAddendum = async () => {
               </div>
               <div>
                 <strong style={strongLabelStyle}>Distributor:</strong>{" "}
-                {selectedVisa.distributor_code || selectedVisa.distributor || "N/A"}
+                {distributorName}
               </div>
               <div>
                 <strong style={strongLabelStyle}>Category:</strong>{" "}
                 {selectedVisa.categoryName || "N/A"}
+              </div>
+              <div
+                style={{
+                  background: "#f9fafb", // light gray background
+                  border: "1px solid #e5e7eb", // subtle border
+                  borderRadius: "8px",
+                  padding: "12px 16px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  fontSize: "16px",
+                  fontWeight: "600",
+                  color: "#111827", // dark gray text
+                  boxShadow: "0 2px 6px rgba(0, 0, 0, 0.05)",
+                }}
+              >
+                <span style={{ color: "#6b7280", fontWeight: "500" }}>Budget:</span>
+                <span style={{ color: "#2563eb", fontWeight: "700" }}>
+                  {selectedVisa.amount_badget != null
+                    ? `₱ ${Number(selectedVisa.amount_badget).toLocaleString()}`
+                    : "N/A"}
+                </span>
               </div>
 
               <div>
@@ -812,56 +877,56 @@ const cancelAddendum = async () => {
 
 
           {/* Cancel button spans all columns */}
-    
-            {/* Cancel Button */}
-            <button
-              onClick={!isCancelled ? cancelAddendum : undefined}
-              disabled={cancelling || isCancelled}
-              aria-disabled={cancelling || isCancelled}
-              aria-live="polite"
-              aria-busy={cancelling}
-              style={{
-                backgroundColor: isCancelled
-                  ? "#9ca3af" // Tailwind's gray-400
-                  : "#ef4444", // red-500
-                color: "#fff",
-                padding: "10px 16px",
-                fontSize: "16px",
-                fontWeight: 600,
-                border: "none",
-                borderRadius: "8px",
-                cursor: cancelling || isCancelled ? "not-allowed" : "pointer",
-                boxShadow: isCancelled
-                  ? "0 2px 6px rgba(107, 114, 128, 0.4)" // subtle gray shadow
-                  : "0 4px 12px rgba(239, 68, 68, 0.5)",
-                flex: "1 1 200px",
-                transition: "background-color 0.3s ease, box-shadow 0.3s ease",
-              }}
-              onMouseEnter={(e) => {
-                if (!cancelling && !isCancelled) {
-                  e.currentTarget.style.backgroundColor = "#dc2626";
-                  e.currentTarget.style.boxShadow = "0 6px 14px rgba(220, 38, 38, 0.6)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!cancelling && !isCancelled) {
-                  e.currentTarget.style.backgroundColor = "#ef4444";
-                  e.currentTarget.style.boxShadow = "0 4px 12px rgba(239, 68, 68, 0.5)";
-                }
-              }}
-            >
-              {cancelling
-                ? "Cancelling..."
-                : isCancelled
-                  ? "Already Cancelled"
-                  : "Cancel Addendum"}
-            </button>
+
+          {/* Cancel Button */}
+          <button
+            onClick={!isCancelled ? cancelAddendum : undefined}
+            disabled={cancelling || isCancelled}
+            aria-disabled={cancelling || isCancelled}
+            aria-live="polite"
+            aria-busy={cancelling}
+            style={{
+              backgroundColor: isCancelled
+                ? "#9ca3af" // Tailwind's gray-400
+                : "#ef4444", // red-500
+              color: "#fff",
+              padding: "10px 16px",
+              fontSize: "16px",
+              fontWeight: 600,
+              border: "none",
+              borderRadius: "8px",
+              cursor: cancelling || isCancelled ? "not-allowed" : "pointer",
+              boxShadow: isCancelled
+                ? "0 2px 6px rgba(107, 114, 128, 0.4)" // subtle gray shadow
+                : "0 4px 12px rgba(239, 68, 68, 0.5)",
+              flex: "1 1 200px",
+              transition: "background-color 0.3s ease, box-shadow 0.3s ease",
+            }}
+            onMouseEnter={(e) => {
+              if (!cancelling && !isCancelled) {
+                e.currentTarget.style.backgroundColor = "#dc2626";
+                e.currentTarget.style.boxShadow = "0 6px 14px rgba(220, 38, 38, 0.6)";
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!cancelling && !isCancelled) {
+                e.currentTarget.style.backgroundColor = "#ef4444";
+                e.currentTarget.style.boxShadow = "0 4px 12px rgba(239, 68, 68, 0.5)";
+              }
+            }}
+          >
+            {cancelling
+              ? "Cancelling..."
+              : isCancelled
+                ? "Already Cancelled"
+                : "Cancel Addendum"}
+          </button>
 
 
 
-            {/* Delete Button */}
-            {/* Delete Button */}
-            {/* <button
+          {/* Delete Button */}
+          {/* Delete Button */}
+          {/* <button
               onClick={isCancelled ? () => handleDeleteVisa(selectedVisa) : undefined}
               title="Delete Visa"
               disabled={!isCancelled || cancelling}
@@ -913,7 +978,7 @@ const cancelAddendum = async () => {
             </button> */}
 
 
-          
+
 
 
         </section>

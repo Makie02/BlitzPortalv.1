@@ -1,8 +1,12 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { FaEdit, FaTrash } from "react-icons/fa";
 import { supabase } from "../supabaseClient";
 import Swal from "sweetalert2";
 import "./BrandSelector.css";
+<<<<<<< HEAD
+=======
+import * as XLSX from "xlsx";
+>>>>>>> adbe71a (Updated  new feature)
 
 function CategorySelector() {
   const [selectedDistributor, setSelectedDistributor] = useState(null);
@@ -12,7 +16,12 @@ function CategorySelector() {
   const [formData, setFormData] = useState({ code: "", name: "", description: "" });
   const [distributorNames, setDistributorNames] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
+<<<<<<< HEAD
   const [searchCategory, setSearchCategory] = useState(""); // New state for category search
+=======
+  const [searchCategory, setSearchCategory] = useState("");
+  const fileInputRef = useRef(null);
+>>>>>>> adbe71a (Updated  new feature)
 
   useEffect(() => {
     let isMounted = true;
@@ -43,7 +52,11 @@ function CategorySelector() {
   );
 
   const filteredCategories = categoryDetails.filter(({ name }) =>
+<<<<<<< HEAD
     name.toLowerCase().includes(searchCategory.toLowerCase()) // Filter categories based on search term
+=======
+    name.toLowerCase().includes(searchCategory.toLowerCase())
+>>>>>>> adbe71a (Updated  new feature)
   );
 
   const handleClick = async (distributor) => {
@@ -53,7 +66,11 @@ function CategorySelector() {
 
     const { data, error } = await supabase
       .from("categorydetails")
+<<<<<<< HEAD
       .select("code, name, description")  // remove id, use code
+=======
+      .select("code, name, description")
+>>>>>>> adbe71a (Updated  new feature)
       .eq("principal_id", distributor.id);
 
     if (error) {
@@ -74,7 +91,11 @@ function CategorySelector() {
     try {
       const { data, error } = await supabase
         .from("categorydetails")
+<<<<<<< HEAD
         .select("code, name, description")  // fetch code instead of id
+=======
+        .select("code, name, description")
+>>>>>>> adbe71a (Updated  new feature)
         .eq("principal_id", distributorId);
 
       if (error) throw error;
@@ -118,19 +139,31 @@ function CategorySelector() {
 
     try {
       if (formData.code) {
+<<<<<<< HEAD
         // === UPDATE ===
+=======
+        // UPDATE
+>>>>>>> adbe71a (Updated  new feature)
         const { error } = await supabase
           .from("categorydetails")
           .update({
             name: formData.name,
             description: formData.description || null,
           })
+<<<<<<< HEAD
           .eq("code", formData.code);  // use code instead of id
 
         if (error) throw error;
       } else {
         // === INSERT ===
         // Generate smart sequential code
+=======
+          .eq("code", formData.code);
+
+        if (error) throw error;
+      } else {
+        // INSERT
+>>>>>>> adbe71a (Updated  new feature)
         const { data: existingCodes, error: fetchError } = await supabase
           .from("categorydetails")
           .select("code")
@@ -142,9 +175,15 @@ function CategorySelector() {
 
         let nextCode = "A00001";
         if (existingCodes.length > 0) {
+<<<<<<< HEAD
           const lastCode = existingCodes[0].code; // e.g., A00057
           const numericPart = parseInt(lastCode.slice(1)) + 1; // 58
           nextCode = `A${numericPart.toString().padStart(5, "0")}`; // A00058
+=======
+          const lastCode = existingCodes[0].code;
+          const numericPart = parseInt(lastCode.slice(1)) + 1;
+          nextCode = `A${numericPart.toString().padStart(5, "0")}`;
+>>>>>>> adbe71a (Updated  new feature)
         }
 
         const { error } = await supabase
@@ -199,7 +238,11 @@ function CategorySelector() {
         const { error } = await supabase
           .from("categorydetails")
           .delete()
+<<<<<<< HEAD
           .eq("code", code);  // use code for deletion
+=======
+          .eq("code", code);
+>>>>>>> adbe71a (Updated  new feature)
 
         if (error) throw error;
 
@@ -239,9 +282,126 @@ function CategorySelector() {
     setCategoryDetails([]);
   };
 
+  // --- EXPORT function: download JSON of categories ---
+  // --- EXPORT to Excel ---
+  const handleExport = () => {
+    if (!selectedDistributorId) {
+      Swal.fire("No distributor selected", "Please select a distributor to export data.", "warning");
+      return;
+    }
+    if (categoryDetails.length === 0) {
+      Swal.fire("No data", "There are no categories to export.", "info");
+      return;
+    }
+
+    // Prepare data for sheet - remove codes if you want
+    const exportData = categoryDetails.map(({ code, name, description }) => ({
+      Code: code,
+      Name: name,
+      Description: description || "",
+    }));
+
+    // Create worksheet
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+
+    // Create workbook and append worksheet
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Categories");
+
+    // Generate Excel file buffer
+    const wbout = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+
+    // Create blob and download
+    const blob = new Blob([wbout], { type: "application/octet-stream" });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${selectedDistributor}_categories.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // --- IMPORT from Excel ---
+const handleImportFile = async (event) => {
+  const file = event.target.files[0];
+  event.target.value = ""; // reset input
+
+  if (!file) return;
+
+  try {
+    const data = await file.arrayBuffer();
+    const workbook = XLSX.read(data);
+
+    // Assuming first sheet contains categories
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+
+    // Convert to JSON
+    const importedCategories = XLSX.utils.sheet_to_json(worksheet);
+
+    if (!Array.isArray(importedCategories)) {
+      throw new Error("Invalid file format");
+    }
+
+    // Validate data - ensure "Name" exists and is string
+    for (const item of importedCategories) {
+      if (!item.Name || typeof item.Name !== "string") {
+        throw new Error("Each category must have a valid 'Name' column");
+      }
+    }
+
+    // Automatically proceed with import (no confirmation dialog)
+
+    // Delete existing categories for this distributor
+    const { error: deleteError } = await supabase
+      .from("categorydetails")
+      .delete()
+      .eq("principal_id", selectedDistributorId);
+
+    if (deleteError) throw deleteError;
+
+    // Insert new categories with new codes (A00001, A00002, ...)
+    for (let i = 0; i < importedCategories.length; i++) {
+      const code = `A${(i + 1).toString().padStart(5, "0")}`;
+      const { error: insertError } = await supabase
+        .from("categorydetails")
+        .insert({
+          code,
+          name: importedCategories[i].Name,
+          description: importedCategories[i].Description || null,
+          principal_id: selectedDistributorId,
+          parentname: selectedDistributor,
+        });
+
+      if (insertError) throw insertError;
+    }
+
+    const newDetails = await fetchCategoryDetailsFromSupabase(selectedDistributorId);
+    setCategoryDetails(newDetails);
+
+    Swal.fire({
+      icon: "success",
+      title: "Import successful",
+      text: `Imported ${importedCategories.length} categories.`,
+      timer: 1500,
+      showConfirmButton: false,
+    });
+  } catch (error) {
+    console.error("Import failed:", error);
+    Swal.fire("Import Failed", error.message || "Invalid file format or error during import", "error");
+  }
+};
+
   return (
     <div className="brand-selector-wrapper">
+
+
+
       <div className="brand-grid-container">
+       
         <h1 className="brand-header">Accounts</h1>
 
         <input
@@ -279,6 +439,26 @@ function CategorySelector() {
 
       {selectedDistributor ? (
         <div className="brand-modal rotate-in">
+           <div style={{ marginBottom: 15, display: "flex", gap: 10 }}>
+          <button className="btn-export" onClick={handleExport} disabled={!selectedDistributorId}>
+            Export Categories
+          </button>
+          <button
+            className="btn-import"
+            onClick={() => fileInputRef.current && fileInputRef.current.click()}
+            disabled={!selectedDistributorId}
+          >
+            Import Categories
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"  // Excel files, update accept to match XLSX format
+            style={{ display: "none" }}
+            onChange={handleImportFile}
+          />
+
+        </div>
           <button className="close-btn" onClick={closeModal}>
             &times;
           </button>
@@ -296,9 +476,15 @@ function CategorySelector() {
               width: "100%",
               padding: "8px",
               fontSize: "14px",
+<<<<<<< HEAD
          
               borderRadius: "6px",
               border: "1px solid #ccc",
+=======
+              borderRadius: "6px",
+              border: "1px solid #ccc",
+              marginTop: 10,
+>>>>>>> adbe71a (Updated  new feature)
             }}
           />
           <div style={tableWrapperStyle}>
@@ -311,7 +497,10 @@ function CategorySelector() {
                 </tr>
               </thead>
               <tbody>
+<<<<<<< HEAD
 
+=======
+>>>>>>> adbe71a (Updated  new feature)
                 {filteredCategories.length === 0 ? (
                   <tr>
                     <td style={{ ...tdStyle, textAlign: "center" }} colSpan={3}>

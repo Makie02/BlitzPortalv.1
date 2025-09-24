@@ -16,6 +16,10 @@ import ApprovalSettings from '../NewComponents/ApprovalSettings.jsx';
 import Budgets from '../NewComponents/Budget.js';
 import NotFoundPage from '../Nofound/NotFoundPage.js';
 import ModuleForm from '../NewComponents/ModuleForm.js';
+<<<<<<< HEAD
+=======
+import ClaimsListing from '../NewComponents/ClaimsListing.jsx';
+>>>>>>> adbe71a (Updated  new feature)
 
 const References = (setCurrentView) => {
     const [view, setView] = useState(null); // null means show cards list
@@ -35,6 +39,7 @@ const References = (setCurrentView) => {
         { id: 8, title: "POSITION" },
 
         { id: 9, title: "LISTING-ACTIVITY" },
+<<<<<<< HEAD
 
 
         { id: 10, title: "CATEGORY" },
@@ -46,15 +51,35 @@ const References = (setCurrentView) => {
 
         { id: 14, title: "404-PAGE" },
 
+=======
+
+
+        { id: 10, title: "CATEGORY" },
+        { id: 11, title: "CATEGORY-LIST-SKU/s" },
+
+        { id: 12, title: "APPROVAL-SETTING" },
+
+        { id: 13, title: "BUDGET-VIEW" },
+
+        { id: 14, title: "404-PAGE" },
+
+        { id: 15, title: "CLAIMS-lISTING-ACTIVITY" },
+>>>>>>> adbe71a (Updated  new feature)
 
 
 
+
+        
 
     ];
 
     const handleClick = (card) => {
         // For cards that have components, set view to title
+<<<<<<< HEAD
         if (card.title === 'USER ROLE' || card.title === 'MODULE' || card.title === 'BUDGET-VIEW' || card.title === '404-PAGE' || card.title === 'DISTRIBUTOR-LISTING' || card.title === 'USER MANAGEMENT' || card.title === 'POSITION' || card.title === 'LISTING-ACTIVITY' || card.title === 'REGULAR-SKU'
+=======
+        if (card.title === 'USER ROLE' || card.title === 'CLAIMS-lISTING-ACTIVITY' || card.title === 'MODULE'|| card.title === 'BUDGET-VIEW' || card.title === '404-PAGE' || card.title === 'DISTRIBUTOR-LISTING' || card.title === 'USER MANAGEMENT' || card.title === 'POSITION' || card.title === 'LISTING-ACTIVITY' || card.title === 'REGULAR-SKU'
+>>>>>>> adbe71a (Updated  new feature)
 
             || card.title === 'APPROVAL-SETTING'
 
@@ -109,6 +134,10 @@ const References = (setCurrentView) => {
                 {view === 'APPROVAL-SETTING' && <ApprovalSettings />}
                 {view === '404-PAGE' && <NotFoundPage />}
                 {view === 'MODULE' && <ModuleForm />}
+<<<<<<< HEAD
+=======
+                {view === 'CLAIMS-lISTING-ACTIVITY' && <ClaimsListing />}
+>>>>>>> adbe71a (Updated  new feature)
 
 
 

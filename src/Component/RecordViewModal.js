@@ -3,37 +3,163 @@ import { supabase } from "../supabaseClient";
 
 const RecordViewModal = ({ record, onClose }) => {
   const [fullRecord, setFullRecord] = useState(null);
+  const [budgetHistory, setBudgetHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [allRecords, setAllRecords] = useState({ regular: [], cover: [] });
-  const [showAllData, setShowAllData] = useState(false);
+  const [activeTab, setActiveTab] = useState("single");
 
-  useEffect(() => {
-    if (record) {
-      fetchFullRecord();
-    }
-  }, [record]); // Fixed: Added record as dependency
+  // Category & Distributor Maps
+  const [categoryMap, setCategoryMap] = useState({});
+  const [distributorMap, setDistributorMap] = useState({});
 
-  useEffect(() => {
-    if (showAllData && record) {
-      fetchAllRecords();
+  // Fetch categorydetails (code → name)
+ const fetchCategoryMap = async () => {
+  try {
+    let allData = [];
+    let from = 0;
+    const chunkSize = 1000; // fetch in chunks
+    let moreData = true;
+
+    while (moreData) {
+      const { data, error } = await supabase
+        .from("categorydetails")
+        .select("code, name")
+        .range(from, from + chunkSize - 1);
+
+      if (error) throw error;
+
+      if (data.length > 0) {
+        allData = [...allData, ...data];
+        from += chunkSize;
+      } else {
+        moreData = false;
+      }
     }
-  }, [showAllData, record]); // Fixed: Added dependencies
+
+    console.log(`✅ categorydetails raw data: ${allData.length} rows loaded`);
+
+    const map = {};
+    allData.forEach((item) => {
+      map[String(item.code).trim()] = item.name;
+    });
+
+    setCategoryMap(map);
+  } catch (err) {
+    console.error("❌ Failed to fetch category details:", err.message);
+  }
+};
+
+// ✅ Helper for account type conversion
+const convertCodesToNames = (value) => {
+  let codes = [];
+
+  if (Array.isArray(value)) {
+    codes = value;
+  } else if (typeof value === "string") {
+    try {
+      codes = JSON.parse(value); // JSON array
+    } catch {
+      codes = value.split(",").map((c) => c.trim());
+    }
+  } else if (value) {
+    codes = [value];
+  }
+
+  const converted = codes.map((code) => {
+    const strCode = String(code).trim();
+    const name = categoryMap[strCode];
+    console.log("👉 Converting account_type:", strCode, "=>", name || "NOT FOUND");
+    return name || strCode;
+  });
+
+  return converted.length > 0 ? converted.join(", ") : "-";
+};
+const [activityMap, setActivityMap] = useState({});
+
+ useEffect(() => {
+  if (record) {
+    fetchFullRecord();
+    fetchCategoryMap();
+    fetchActivityMap(); // ✅ added
+  }
+}, [record]);
+  // Fetch distributors (code → name)
+  useEffect(() => {
+    const fetchDistributorMap = async () => {
+      const { data, error } = await supabase
+        .from("distributors") // ⚠️ change table name if different
+        .select("code, name");
+
+      if (error) {
+        console.error("❌ Error fetching distributors:", error);
+        return;
+      }
+
+      const map = {};
+      data.forEach((item) => {
+        map[String(item.code)] = item.name;
+      });
+      setDistributorMap(map);
+    };
+
+    fetchDistributorMap();
+  }, []);
+
+
+
+  const fetchActivityMap = async () => {
+  try {
+    let allData = [];
+    let from = 0;
+    const chunkSize = 1000;
+    let moreData = true;
+
+    while (moreData) {
+      const { data, error } = await supabase
+        .from("activity")
+        .select("code, name")
+        .range(from, from + chunkSize - 1);
+
+      if (error) throw error;
+
+      if (data.length > 0) {
+        allData = [...allData, ...data];
+        from += chunkSize;
+      } else {
+        moreData = false;
+      }
+    }
+
+    console.log(`✅ activity raw data: ${allData.length} rows loaded`);
+
+    const map = {};
+    allData.forEach((item) => {
+      map[String(item.code).trim()] = item.name;
+    });
+
+    setActivityMap(map);
+  } catch (err) {
+    console.error("❌ Failed to fetch activity:", err.message);
+  }
+};
+
+  // Fetch full record
+  useEffect(() => {
+    if (record && activeTab === "single") fetchFullRecord();
+    if (activeTab === "budget") fetchBudgetHistory();
+  }, [record, activeTab]);
 
   const fetchFullRecord = async () => {
     try {
       setLoading(true);
       setError(null);
-      
-      const tableName = record.source || 'regular_pwp';
+      const tableName = record.source || "regular_pwp";
       const { data, error: fetchError } = await supabase
         .from(tableName)
-        .select('*')
-        .eq('id', record.id)
+        .select("*")
+        .eq("id", record.id)
         .single();
-
       if (fetchError) throw fetchError;
-      
       setFullRecord(data);
     } catch (err) {
       setError(`Failed to fetch record details: ${err.message}`);
@@ -42,497 +168,358 @@ const RecordViewModal = ({ record, onClose }) => {
     }
   };
 
-  const fetchAllRecords = async () => {
+  const fetchBudgetHistory = async () => {
     try {
-      // Fetch all regular PWP records
-      const { data: regularData, error: regularError } = await supabase
-        .from('regular_pwp')
-        .select('*')
-        .order('id', { ascending: false });
-
-      if (regularError) throw regularError;
-
-      // Fetch all cover PWP records
-      const { data: coverData, error: coverError } = await supabase
-        .from('cover_pwp')
-        .select('*')
-        .order('id', { ascending: false });
-
-      if (coverError) throw coverError;
-
-      setAllRecords({
-        regular: regularData || [],
-        cover: coverData || []
-      });
+      setLoading(true);
+      setError(null);
+      const { data, error: fetchError } = await supabase
+        .from("approved_history_budget")
+        .select("*")
+        .order("id", { ascending: false });
+      if (fetchError) throw fetchError;
+      setBudgetHistory(data || []);
     } catch (err) {
-      setError(`Failed to fetch all records: ${err.message}`);
+      setError(`Failed to fetch budget history: ${err.message}`);
+    } finally {
+      setLoading(false);
     }
   };
+
+  const [filteredBudgetHistory, setFilteredBudgetHistory] = useState([]);
+
+  useEffect(() => {
+    if (!record) return;
+
+    if (activeTab === "budget") {
+      if (budgetHistory.length === 0) {
+        fetchBudgetHistory();
+      }
+
+      const filtered = budgetHistory.filter(
+        (b) =>
+          b["Cover PWP Code"] === record.cover_code ||
+          b["PWP Code"] === record.regularpwpcode
+      );
+      setFilteredBudgetHistory(filtered);
+    }
+  }, [activeTab, record, budgetHistory]);
 
   const formatColumnName = (colName) => {
     return colName
-      .replace(/_/g, ' ')
-      .replace(/\b\w/g, l => l.toUpperCase())
-      .replace('Pwp', 'PWP')
-      .replace('Id', 'ID');
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (l) => l.toUpperCase())
+      .replace("Pwp", "PWP")
+      .replace("Id", "ID");
   };
 
-  const formatCellValue = (value, colName) => {
-    if (!value && value !== 0) return '-';
-    
-    if (colName === 'created_at' && value) {
-      try {
-        return new Date(value).toLocaleString();
-      } catch {
-        return value;
-      }
+// ✅ Format cell values with logs
+const formatCellValue = (value, colName) => {
+  if (!value && value !== 0) return "-";
+
+  console.log("🔍 formatCellValue:", colName, value);
+
+  // ✅ Handle account types
+  if (
+    colName === "account_type" ||
+    colName === "account_types" ||
+    colName === "accountType"
+  ) {
+    return convertCodesToNames(value);
+  }
+
+  // ✅ Convert distributor
+  if (colName === "distributor" || colName === "distributor_code") {
+    const strCode = String(value).trim();
+    const name = distributorMap[strCode];
+    console.log("👉 Converting distributor:", strCode, "=>", name || "NOT FOUND");
+    return name || strCode;
+  }
+
+  // ✅ Convert activity (code → name)
+  if (colName === "activity" || colName === "activity_code") {
+    const strCode = String(value).trim();
+    const name = activityMap[strCode];
+    console.log("👉 Converting activity:", strCode, "=>", name || "NOT FOUND");
+    return name || strCode;
+  }
+
+  if (colName === "created_at" && value) {
+    try {
+      return new Date(value).toLocaleString();
+    } catch {
+      return value;
     }
-    
-    if (typeof value === 'object') {
-      return JSON.stringify(value, null, 2);
-    }
-    
-    return String(value);
-  };
+  }
 
-  const exportTableData = (data, tableName) => {
-    if (!data || data.length === 0) return;
+  if (typeof value === "object") {
+    return JSON.stringify(value, null, 2);
+  }
 
-    const headers = Object.keys(data[0]).map(col => formatColumnName(col)).join(',');
-    const rows = data.map(row => 
-      Object.keys(data[0]).map(col => {
-        const value = row[col] || '';
-        return typeof value === 'string' && (value.includes(',') || value.includes('"')) 
-          ? `"${value.replace(/"/g, '""')}"` 
-          : value;
-      }).join(',')
-    );
-    
-    const csvContent = [headers, ...rows].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `${tableName}_records_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+  return String(value);
+};
+
 
   if (!record) return null;
-
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.7)',
-      zIndex: 1000,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '20px'
-    }}>
-      <div style={{
-        backgroundColor: 'white',
-        borderRadius: '12px',
-        maxWidth: showAllData ? '95vw' : '800px',
-        maxHeight: '90vh',
-        width: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        boxShadow: '0 10px 40px rgba(0,0,0,0.3)'
-      }}>
-        {/* Modal Header */}
-        <div style={{
-          padding: '24px 30px',
-          backgroundColor: '#1976d2',
-          color: 'white',
-          borderRadius: '12px 12px 0 0',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
-        }}>
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: "rgba(0, 0, 0, 0.7)",
+        zIndex: 1000,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "20px",
+      }}
+    >
+      <div
+        style={{
+          backgroundColor: "white",
+          borderRadius: "12px",
+          maxWidth: "95vw",
+          maxHeight: "90vh",
+          width: "100%",
+          display: "flex",
+          flexDirection: "column",
+          boxShadow: "0 10px 40px rgba(0,0,0,0.3)",
+        }}
+      >
+        {/* Header */}
+        <div
+          style={{
+            padding: "24px 30px",
+            backgroundColor: "#0080ffff",
+            color: "white",
+            borderRadius: "12px 12px 0 0",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
           <div>
-            <h2 style={{ margin: '0 0 8px', fontSize: '20px' }}>
-              {showAllData ? 'All PWP Records Database View' : 'Record Details'}
+            <h2 style={{ margin: "0 0 8px", fontSize: "30px", color: "#ffff" }}>
+              {activeTab === "single" ? "Record Details" : "Budget History"}
             </h2>
-            <p style={{ margin: 0, opacity: 0.9, fontSize: '14px' }}>
-              {showAllData 
-                ? `Regular: ${allRecords.regular.length} | Cover: ${allRecords.cover.length} records`
-                : `ID: ${record.id} - ${record.source === 'cover_pwp' ? 'Cover PWP' : 'Regular PWP'}`
-              }
-            </p>
+            <div style={{ padding: "16px 0", borderBottom: "1px solid #e0e0e0" }}>
+              <h3 style={{ margin: 0, color: "#ffffffff", fontSize: "18px" }}>
+                {record?.source === "cover_pwp"
+                  ? `Cover PWP Record: ${record?.cover_code || "-"}`
+                  : `Regular PWP Record: ${record?.regularpwpcode || "-"}`}
+              </h3>
+            </div>
           </div>
           <button
             onClick={onClose}
             style={{
-              backgroundColor: 'rgba(255,255,255,0.2)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '50%',
-              width: '40px',
-              height: '40px',
-              cursor: 'pointer',
-              fontSize: '18px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
+              backgroundColor: "rgba(255,255,255,0.2)",
+              color: "white",
+              border: "none",
+              borderRadius: "50%",
+              width: "40px",
+              height: "40px",
+              cursor: "pointer",
+              fontSize: "18px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
           >
             ×
           </button>
         </div>
 
-        {/* Toggle View Buttons */}
-        <div style={{
-          padding: '16px 30px',
-          backgroundColor: '#f5f5f5',
-          borderBottom: '1px solid #e0e0e0',
-          display: 'flex',
-          gap: '10px',
-          alignItems: 'center'
-        }}>
-          <button
-            onClick={() => setShowAllData(false)}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: !showAllData ? '#1976d2' : 'white',
-              color: !showAllData ? 'white' : '#1976d2',
-              border: '1px solid #1976d2',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '14px',
-              fontWeight: '500'
-            }}
-          >
-            📋 Single Record View
-          </button>
-          <button
-            onClick={() => setShowAllData(true)}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: showAllData ? '#1976d2' : 'white',
-              color: showAllData ? 'white' : '#1976d2',
-              border: '1px solid #1976d2',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '14px',
-              fontWeight: '500'
-            }}
-          >
-            🗄️ All Database Records
-          </button>
-        </div>
-
-        {/* Modal Content */}
-        <div style={{
-          flex: 1,
-          overflow: 'auto',
-          padding: '0'
-        }}>
-          {loading ? (
-            <div style={{ 
-              padding: '40px', 
-              textAlign: 'center' 
-            }}>
-              <div style={{
-                width: '40px',
-                height: '40px',
-                border: '4px solid #e3f2fd',
-                borderTop: '4px solid #1976d2',
-                borderRadius: '50%',
-                animation: 'spin 1s linear infinite',
-                margin: '0 auto 20px'
-              }}></div>
-              <p>Loading {showAllData ? 'all records' : 'record details'}...</p>
-            </div>
-          ) : error ? (
-            <div style={{ 
-              padding: '30px',
-              textAlign: 'center',
-              color: '#d32f2f'
-            }}>
-              <p>{error}</p>
-              <button
-                onClick={() => showAllData ? fetchAllRecords() : fetchFullRecord()}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: '#1976d2',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontSize: '14px'
-                }}
-              >
-                Retry
-              </button>
-            </div>
-          ) : showAllData ? (
-            /* All Records View */
-            <div>
-              {/* Regular PWP Section */}
-              <div style={{ marginBottom: '30px' }}>
-                <div style={{
-                  padding: '20px 30px',
-                  backgroundColor: '#e3f2fd',
-                  borderBottom: '2px solid #1976d2',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}>
-                  <h3 style={{ margin: 0, color: '#1976d2' }}>
-                    Regular PWP Records ({allRecords.regular.length})
-                  </h3>
-                  <button
-                    onClick={() => exportTableData(allRecords.regular, 'regular_pwp')}
-                    style={{
-                      padding: '6px 12px',
-                      backgroundColor: '#4caf50',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '12px'
-                    }}
-                  >
-                    📊 Export Regular
-                  </button>
-                </div>
-                {allRecords.regular.length > 0 ? (
-                  <div style={{ overflowX: 'auto', maxHeight: '400px' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                      <thead style={{ position: 'sticky', top: 0, backgroundColor: '#f5f5f5' }}>
-                        <tr>
-                          {Object.keys(allRecords.regular[0]).map(col => (
-                            <th key={col} style={{
-                              padding: '12px 16px',
-                              textAlign: 'left',
-                              borderBottom: '2px solid #ddd',
-                              fontSize: '12px',
-                              fontWeight: '600',
-                              backgroundColor: '#f5f5f5'
-                            }}>
-                              {formatColumnName(col)}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {allRecords.regular.map((row, index) => (
-                          <tr key={row.id || index} style={{
-                            backgroundColor: index % 2 === 0 ? 'white' : '#fafafa'
-                          }}>
-                            {Object.keys(allRecords.regular[0]).map(col => (
-                              <td key={col} style={{
-                                padding: '12px 16px',
-                                borderBottom: '1px solid #eee',
-                                fontSize: '12px',
-                                maxWidth: '200px',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap'
-                              }}>
-                                {formatCellValue(row[col], col)}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
-                    No regular PWP records found
-                  </div>
-                )}
-              </div>
-
-              {/* Cover PWP Section */}
-              <div>
-                <div style={{
-                  padding: '20px 30px',
-                  backgroundColor: '#e8f5e8',
-                  borderBottom: '2px solid #4caf50',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}>
-                  <h3 style={{ margin: 0, color: '#4caf50' }}>
-                    Cover PWP Records ({allRecords.cover.length})
-                  </h3>
-                  <button
-                    onClick={() => exportTableData(allRecords.cover, 'cover_pwp')}
-                    style={{
-                      padding: '6px 12px',
-                      backgroundColor: '#4caf50',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '12px'
-                    }}
-                  >
-                    📊 Export Cover
-                  </button>
-                </div>
-                {allRecords.cover.length > 0 ? (
-                  <div style={{ overflowX: 'auto', maxHeight: '400px' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                      <thead style={{ position: 'sticky', top: 0, backgroundColor: '#f5f5f5' }}>
-                        <tr>
-                          {Object.keys(allRecords.cover[0]).map(col => (
-                            <th key={col} style={{
-                              padding: '12px 16px',
-                              textAlign: 'left',
-                              borderBottom: '2px solid #ddd',
-                              fontSize: '12px',
-                              fontWeight: '600',
-                              backgroundColor: '#f5f5f5'
-                            }}>
-                              {formatColumnName(col)}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {allRecords.cover.map((row, index) => (
-                          <tr key={row.id || index} style={{
-                            backgroundColor: index % 2 === 0 ? 'white' : '#fafafa'
-                          }}>
-                            {Object.keys(allRecords.cover[0]).map(col => (
-                              <td key={col} style={{
-                                padding: '12px 16px',
-                                borderBottom: '1px solid #eee',
-                                fontSize: '12px',
-                                maxWidth: '200px',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap'
-                              }}>
-                                {formatCellValue(row[col], col)}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
-                    No cover PWP records found
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            /* Single Record View */
-            fullRecord && (
-              <div style={{ padding: '30px' }}>
-                <div style={{ 
-                  display: 'grid', 
-                  gap: '20px',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))'
-                }}>
-                  {Object.entries(fullRecord).map(([key, value]) => (
-                    <div key={key} style={{
-                      padding: '16px',
-                      backgroundColor: '#f8f9fa',
-                      borderRadius: '8px',
-                      border: '1px solid #e0e0e0'
-                    }}>
-                      <div style={{
-                        fontSize: '12px',
-                        fontWeight: '600',
-                        color: '#666',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.5px',
-                        marginBottom: '8px'
-                      }}>
-                        {formatColumnName(key)}
-                      </div>
-                      <div style={{
-                        fontSize: '14px',
-                        color: '#333',
-                        lineHeight: '1.4',
-                        wordBreak: 'break-word',
-                        whiteSpace: typeof value === 'object' ? 'pre-wrap' : 'normal',
-                        fontFamily: typeof value === 'object' ? 'monospace' : 'inherit'
-                      }}>
-                        {formatCellValue(value, key)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )
-          )}
-        </div>
-
-        {/* Modal Footer */}
-        <div style={{
-          padding: '20px 30px',
-          backgroundColor: '#f5f5f5',
-          borderTop: '1px solid #e0e0e0',
-          borderRadius: '0 0 12px 12px',
-          display: 'flex',
-          justifyContent: 'flex-end',
-          gap: '10px'
-        }}>
-          {showAllData && (
+        {/* Tabs */}
+        <div style={{ display: "flex", borderBottom: "1px solid #e0e0e0", backgroundColor: "#f5f5f5" }}>
+          {["single", "budget"].map((tab) => (
             <button
-              onClick={() => {
-                // Export both tables combined
-                const combinedData = [
-                  ...allRecords.regular.map(r => ({...r, table_source: 'regular_pwp'})),
-                  ...allRecords.cover.map(r => ({...r, table_source: 'cover_pwp'}))
-                ];
-                exportTableData(combinedData, 'combined_pwp');
-              }}
+              key={tab}
+              onClick={() => setActiveTab(tab)}
               style={{
-                padding: '10px 20px',
-                backgroundColor: '#4caf50',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontSize: '14px',
-                fontWeight: '500'
+                flex: 1,
+                padding: "12px",
+                cursor: "pointer",
+                border: "none",
+                borderBottom: activeTab === tab ? "3px solid #1e58a3ff" : "3px solid transparent",
+                backgroundColor: activeTab === tab ? "#1e58a3ff" : "#f5f5f5",
+                color: activeTab === tab ? "white" : "#1976d2",
+                fontWeight: "500",
+                position: "relative",
               }}
             >
-              📊 Export All Combined
+              {tab === "single" ? "📋 Single Record" : "💰 Budget History"}
             </button>
-          )}
-          <button
-            onClick={onClose}
-            style={{
-              padding: '10px 20px',
-              backgroundColor: '#6c757d',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '14px',
-              fontWeight: '500'
-            }}
-          >
-            Close
-          </button>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div style={{ flex: 1, overflow: "auto", padding: "20px" }}>
+          {loading ? (
+            <div style={{ textAlign: "center", padding: "40px" }}>
+              <div
+                style={{
+                  width: "40px",
+                  height: "40px",
+                  border: "4px solid #e3f2fd",
+                  borderTop: "4px solid #1976d2",
+                  borderRadius: "50%",
+                  animation: "spin 1s linear infinite",
+                  margin: "0 auto 20px",
+                }}
+              ></div>
+              <p>Loading...</p>
+            </div>
+          ) : error ? (
+            <div style={{ textAlign: "center", color: "#d32f2f" }}>
+              <p>{error}</p>
+            </div>
+          ) : activeTab === "single" && fullRecord ? (
+            <div
+              style={{
+                display: "grid",
+                gap: "20px",
+                gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+              }}
+            >
+              {Object.entries(fullRecord).map(([key, value]) => {
+                const displayValue =
+                  (key === "accountType" || key === "account_type") &&
+                    Object.keys(categoryMap).length > 0
+                    ? convertCodesToNames(value)
+                    : formatCellValue(value, key);
+
+                return (
+                  <div
+                    key={key}
+                    style={{
+                      padding: "16px",
+                      backgroundColor: "#f8f9fa",
+                      borderRadius: "8px",
+                      border: "1px solid #e0e0e0",
+                      marginBottom: "8px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: "12px",
+                        fontWeight: "600",
+                        color: "#666",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.5px",
+                        marginBottom: "8px",
+                      }}
+                    >
+                      {formatColumnName(key)}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "14px",
+                        color: "#333",
+                        lineHeight: "1.4",
+                        wordBreak: "break-word",
+                        whiteSpace: typeof value === "object" ? "pre-wrap" : "normal",
+                        fontFamily: typeof value === "object" ? "monospace" : "inherit",
+                      }}
+                    >
+                      {displayValue}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : activeTab === "budget" ? (
+            <div>
+              {filteredBudgetHistory.length > 0 ? (
+                <div style={{ overflowX: "auto", maxHeight: "400px" }}>
+                  <h3 style={{ margin: 0, color: "#000000ff", fontSize: "18px" }}>
+                    {record.source === "cover_pwp"
+                      ? `Cover PWP Record: ${record.cover_code || "-"}`
+                      : `Regular PWP Record: ${record.regularpwpcode || "-"}`}
+                  </h3>
+
+                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                    <thead style={{ position: "sticky", top: 0, backgroundColor: "#f5f5f5" }}>
+                      <tr>
+                        {[
+                          "id",
+                          "pwp_code",
+                          "cover_pwp_code",
+                          "approver_id",
+                          "date_responded",
+                          "response",
+                          "remaining_balance",
+                          "credit_budget",
+                          "type",
+                          "created_form",
+                        ].map((col) => (
+                          <th
+                            key={col}
+                            style={{
+                              padding: "12px 16px",
+                              textAlign: "left",
+                              borderBottom: "2px solid #ddd",
+                              fontSize: "12px",
+                              fontWeight: "600",
+                              backgroundColor: "#f5f5f5",
+                            }}
+                          >
+                            {formatColumnName(col)}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredBudgetHistory.map((row, index) => (
+                        <tr
+                          key={row.id || index}
+                          style={{
+                            backgroundColor: index % 2 === 0 ? "white" : "#fafafa",
+                          }}
+                        >
+                          {[
+                            "id",
+                            "pwp_code",
+                            "cover_pwp_code",
+                            "approver_id",
+                            "date_responded",
+                            "response",
+                            "remaining_balance",
+                            "credit_budget",
+                            "type",
+                            "created_form",
+                          ].map((col) => (
+                            <td
+                              key={col}
+                              style={{
+                                padding: "12px 16px",
+                                borderBottom: "1px solid #eee",
+                                fontSize: "12px",
+                                maxWidth: "200px",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {formatCellValue(row[col], col)}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div style={{ padding: "20px", textAlign: "center", color: "#666" }}>
+                  No budget history found for this record
+                </div>
+              )}
+            </div>
+          ) : null}
         </div>
       </div>
-
-      <style dangerouslySetInnerHTML={{
-        __html: `
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-        `
-      }} />
     </div>
   );
 };

@@ -346,6 +346,8 @@ function Sidebar({ sidebarExpanded, setSidebarExpanded, setCurrentView, setLogge
             title: "Claims",
             submenu: [
                 { title: "Claims Status", view: "ClaimsStatusUpload" },
+                { title: "Claims PWP", view: "Claims_pwp" },
+
                 // { title: "Rentals", view: "RentalsForm" },
 
 
@@ -368,7 +370,6 @@ function Sidebar({ sidebarExpanded, setSidebarExpanded, setCurrentView, setLogge
             submenu: [
                 { title: "References", view: "References" },
                 { title: "User Management", view: "UserManagement" },
-                { title: "Category", view: "BrandSelector" },
                 // { label: "Brand Approval Plan", view: "BrandApprovalForm" },
                 // { title: "Cost Details", view: "Activities" },
             ],
@@ -381,6 +382,11 @@ function Sidebar({ sidebarExpanded, setSidebarExpanded, setCurrentView, setLogge
                 { title: "References" }, // No view
                 { title: "View Records", view: "RecordsPage" },
                 { title: "Approved  List", view: "ApprovalList" },
+
+                { title: "Claims Records List", view: "ClaimsRecords" },
+
+
+                
             ],
         },
     ];

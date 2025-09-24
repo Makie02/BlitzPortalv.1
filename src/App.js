@@ -41,6 +41,8 @@ import RegularPwpUploadForm from "./Create/RegularPwpUploadForm.jsx";
 import { supabase } from "./supabaseClient.js";
 import References from "./Component/References.jsx";
 import NotFoundPage from "./Nofound/NotFoundPage.js";
+import Claims_pwp from "./Create/Claims_pwp.jsx";
+import ClaimsRecords from "./NewComponents/ClaimsRecords.js";
 
 function App() {
 
@@ -281,7 +283,7 @@ function App() {
     }
   }, []);
 
-     const [noDataFound, setNoDataFound] = useState(false);
+  const [noDataFound, setNoDataFound] = useState(false);
 
   const [rolePermissions, setRolePermissions] = useState({});
 
@@ -340,9 +342,16 @@ function App() {
   }, [loggedInUser?.PermissionRole]);
 
   // Show NotFoundPage if no critical data
+<<<<<<< HEAD
 if (loggedInUser && noDataFound && currentView !== 'LoginPage') {
   return <NotFoundPage setCurrentView={setCurrentView} />;
 }
+=======
+  if (loggedInUser && noDataFound && currentView !== 'LoginPage') {
+    return <NotFoundPage setCurrentView={setCurrentView} />;
+  }
+
+>>>>>>> adbe71a (Updated  new feature)
 
 
 
@@ -383,7 +392,11 @@ if (loggedInUser && noDataFound && currentView !== 'LoginPage') {
       case "References": return <References setCurrentView={setCurrentView} />;
       case "NotFoundPage": return <NotFoundPage setCurrentView={setCurrentView} />;
 
-      
+      case "Claims_pwp": return <Claims_pwp setCurrentView={setCurrentView} />;
+
+      case "ClaimsRecords": return <ClaimsRecords setCurrentView={setCurrentView} />;
+
+
       default: return <Dashboard setCurrentView={setCurrentView} />;
     }
   };

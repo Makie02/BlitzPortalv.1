@@ -18,8 +18,92 @@ function RecordsPage() {
   const [setRowsPerPage] = useState(10);
 
   // Define the specific columns to show for each table (moved outside component or use useMemo)
-  const COVER_COLUMNS = useMemo(() => ['id', 'cover_code', 'account_type', 'pwp_type', 'created_at', 'createForm'], []);
-  const REGULAR_COLUMNS = useMemo(() => ['id', 'regularpwpcode', 'accountType', 'pwptype', 'created_at', 'createForm'], []);
+  const COVER_COLUMNS = useMemo(() => ['id', 'cover_code', 'pwp_type', 'created_at', 'createForm'], []);
+  const REGULAR_COLUMNS = useMemo(() => ['id', 'regularpwpcode', 'pwptype', 'created_at', 'createForm'], []);
+
+
+  const [categoryMap, setCategoryMap] = useState({});
+
+  useEffect(() => {
+    const fetchCategoryMap = async () => {
+      const { data, error } = await supabase
+        .from("categorydetails")
+        .select("code, name");
+
+      if (error) {
+        console.error("Error fetching categories:", error);
+        return;
+      }
+
+      const map = {};
+      data.forEach(item => {
+        map[item.code] = item.name;
+      });
+
+      setCategoryMap(map);
+    };
+
+    fetchCategoryMap();
+  }, []);
+
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const { data: rows, error } = await supabase
+        .from("your_main_table")
+        .select("*");
+
+      if (error) {
+        console.error("Error fetching data:", error);
+        return;
+      }
+
+      // Convert codes to names automatically
+      const converted = rows.map(row => {
+        const newRow = { ...row };
+
+        // Convert accountType array
+        if (Array.isArray(row.accountType)) {
+          newRow.accountType = row.accountType.map(code => categoryMap[code] || code);
+        }
+
+        // If you have other fields that need conversion, do similar mapping
+        return newRow;
+      });
+
+      console.log("Converted Row Data:", converted);
+      setData(converted);
+    };
+
+    // Only fetch if categoryMap is ready
+    if (Object.keys(categoryMap).length > 0) {
+      fetchData();
+    }
+  }, [categoryMap]);
+
+
+
+  // Convert code fields to names
+
+
+
+
+  // Inside your component
+  const convertCodesToNames = (codesField) => {
+    if (!codesField) return "";
+
+    let codesArray = [];
+
+    if (Array.isArray(codesField)) {
+      codesArray = codesField;
+    } else if (typeof codesField === "string") {
+      codesArray = codesField.split(","); // split comma-separated strings
+    } else {
+      codesArray = [codesField];
+    }
+
+    return codesArray.map(code => categoryMap[code] || code).join(", ");
+  };
 
   const handleViewRecord = (record) => {
     setSelectedRecord(record);
@@ -70,7 +154,7 @@ function RecordsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage] = useState(10);
 
-const totalPages = Math.ceil(data.length / rowsPerPage);
+  const totalPages = Math.ceil(data.length / rowsPerPage);
 
   const paginatedData = data.slice(
     (currentPage - 1) * rowsPerPage,
@@ -79,168 +163,158 @@ const totalPages = Math.ceil(data.length / rowsPerPage);
 
   // Modified fetchData function - replace your existing fetchData with this
   const fetchData = useCallback(async () => {
+    if (Object.keys(categoryMap).length === 0) return; // wait until categoryMap is ready
+
     try {
       setLoading(true);
       setError(null);
 
       let coverData = [];
       let regularData = [];
-      let allColumns = [];
 
+      // Fetch cover_pwp
       if (filter === "all" || filter === "cover") {
         const { data: cData, error: cError } = await supabase
           .from("cover_pwp")
-          .select(COVER_COLUMNS.join(','))
+          .select(COVER_COLUMNS.join(","))
           .order("id", { ascending: false })
           .limit(50);
-
         if (cError) throw cError;
-        coverData = (cData || []).map((item) => ({
+
+        coverData = (cData || []).map(item => ({
           ...filterColumns(item, COVER_COLUMNS),
           source: "cover_pwp",
-          pwp_code: item.cover_code // Use this to match with Approval_History
+          pwp_code: item.cover_code,
         }));
       }
 
+      // Fetch regular_pwp
       if (filter === "all" || filter === "regular") {
         const { data: rData, error: rError } = await supabase
           .from("regular_pwp")
-          .select(REGULAR_COLUMNS.join(','))
+          .select(REGULAR_COLUMNS.join(","))
           .order("id", { ascending: false })
           .limit(50);
-
         if (rError) throw rError;
-        regularData = (rData || []).map((item) => ({
+
+        regularData = (rData || []).map(item => ({
           ...filterColumns(item, REGULAR_COLUMNS),
           source: "regular_pwp",
-          pwp_code: item.regularpwpcode // Use this to match with Approval_History
+          pwp_code: item.regularpwpcode,
         }));
       }
 
-      const mergedData = [...coverData, ...regularData];
+      // Merge data
+      let mergedData = [...coverData, ...regularData];
 
-      // Get all PWP codes to fetch approval status
-      const allPwpCodes = mergedData
-        .map(item => item.pwp_code)
-        .filter(code => code); // Remove null/undefined codes
-
-      // Fetch approval status for all PWP codes
+      // Fetch approval status
+      const allPwpCodes = mergedData.map(item => item.pwp_code).filter(Boolean);
       const approvalStatusMap = await getApprovalStatus(allPwpCodes);
 
-      // Add approval status to each item
-      const dataWithApprovalStatus = mergedData.map(item => ({
-        ...item,
-        approval_status: approvalStatusMap[item.pwp_code]?.status || 'Pending',
-        date_responded: approvalStatusMap[item.pwp_code]?.date_responded,
-        approval_created: approvalStatusMap[item.pwp_code]?.approval_created
-      }));
+      // Merge approval status and convert codes to names
+      const normalizedData = mergedData.map(item => {
+        // Merge approval status
+        const approval = approvalStatusMap[item.pwp_code] || {};
+        const newItem = {
+          ...item,
+          approval_status: approval.status || "Pending",
+          date_responded: approval.date_responded,
+          approval_created: approval.approval_created,
+          // Normalize fields
+          code: item.regularpwpcode || item.cover_code || "-",
+          accountType: item.accountType || item.account_type || "-",
+          pwptype: item.pwptype || item.pwp_type || "-",
+        };
 
-      // Apply filters
-      let filteredData = dataWithApprovalStatus;
+        // Convert codes → names using categoryMap
+        newItem.accountType = Array.isArray(newItem.accountType)
+          ? newItem.accountType.map(code => categoryMap[code] || code)
+          : categoryMap[newItem.accountType] || newItem.accountType;
+
+        newItem.account_type = newItem.account_type
+          ? categoryMap[newItem.account_type] || newItem.account_type
+          : "-";
+
+        newItem.pwptype = newItem.pwptype
+          ? categoryMap[newItem.pwptype] || newItem.pwptype
+          : "-";
+
+        newItem.pwp_type = newItem.pwp_type
+          ? categoryMap[newItem.pwp_type] || newItem.pwp_type
+          : "-";
+
+        return newItem;
+      });
 
       // Apply search filter
+      let filteredData = normalizedData;
       if (searchQuery) {
         filteredData = filteredData.filter(item => {
           const searchFields = [
-            item.code,                   // for "all" filter
-            item.cover_code,             // for cover records
-            item.regularpwpcode,        // for regular records
+            item.code,
+            item.cover_code,
+            item.regularpwpcode,
             item.id,
             item.account_type,
             item.accountType,
             item.pwp_type,
             item.pwptype,
-            item.createForm
+            item.createForm,
           ];
-
-          return searchFields.some(field =>
-            field && field.toString().toLowerCase().includes(searchQuery.toLowerCase())
-          );
+          return searchFields.some(f => f && f.toString().toLowerCase().includes(searchQuery.toLowerCase()));
         });
       }
 
-      // Apply status filter based on approval status
+      // Apply status filter
       if (statusFilter !== "all") {
         filteredData = filteredData.filter(item => {
-          const itemStatus = item.approval_status ? item.approval_status.toLowerCase() : 'pending';
-          if (statusFilter === "sent_back") {
-            return itemStatus === "sent back for revision" || itemStatus === "sent back";
+          const itemStatus = item.approval_status?.toLowerCase() || "pending";
+          switch (statusFilter) {
+            case "sent_back":
+              return itemStatus === "sent back for revision" || itemStatus === "sent back";
+            case "cancelled":
+              return itemStatus === "cancelled";
+            case "pending":
+              return itemStatus === "pending" || !item.approval_status;
+            case "approved":
+              return itemStatus === "approved";
+            case "declined":
+              return itemStatus === "declined";
+            default:
+              return itemStatus === statusFilter;
           }
-          if (statusFilter === "cancelled") {
-            return itemStatus === "cancelled";
-          }
-          if (statusFilter === "pending") {
-            return itemStatus === "pending" || !item.approval_status;
-          }
-          if (statusFilter === "approved") {
-            return itemStatus === "approved";
-          }
-          if (statusFilter === "declined") {
-            return itemStatus === "declined";
-          }
-          return itemStatus === statusFilter;
         });
       }
 
       // Apply date filters
       if (dateFrom) {
-        filteredData = filteredData.filter(item => {
-          if (!item.created_at) return false;
-          const itemDate = new Date(item.created_at);
-          const fromDate = new Date(dateFrom);
-          return itemDate >= fromDate;
-        });
+        filteredData = filteredData.filter(item => item.created_at && new Date(item.created_at) >= new Date(dateFrom));
       }
-
       if (dateTo) {
         filteredData = filteredData.filter(item => {
           if (!item.created_at) return false;
-          const itemDate = new Date(item.created_at);
           const toDate = new Date(dateTo);
           toDate.setHours(23, 59, 59, 999);
-          return itemDate <= toDate;
+          return new Date(item.created_at) <= toDate;
         });
       }
 
-      if (filteredData.length > 0) {
-        // Create unified column set
-        const regularCols = REGULAR_COLUMNS.filter(col => col !== 'regularpwpcode');
-        const coverCols = COVER_COLUMNS.filter(col => col !== 'cover_code');
+      // Normalize columns
+      let allColumns = [];
+      const regularCols = REGULAR_COLUMNS.filter(col => col !== "regularpwpcode");
+      const coverCols = COVER_COLUMNS.filter(col => col !== "cover_code");
+      if (filter === "all") allColumns = ["id", "code", ...regularCols.slice(1)];
+      else if (filter === "cover") allColumns = ["id", "cover_code", ...coverCols.slice(1)];
+      else if (filter === "regular") allColumns = ["id", "regularpwpcode", ...regularCols.slice(1)];
 
-        // Create unified columns with code column as the second column
-        if (filter === "all") {
-          allColumns = ['id', 'code', ...regularCols.slice(1)]; // Skip id since it's already first
-        } else if (filter === "cover") {
-          allColumns = ['id', 'cover_code', ...coverCols.slice(1)];
-        } else if (filter === "regular") {
-          allColumns = ['id', 'regularpwpcode', ...regularCols.slice(1)];
-        }
-
-        // Normalize the data to have a unified 'code' column when showing all
-        const normalizedData = filteredData.map(item => {
-          if (filter === "all") {
-            return {
-              ...item,
-              code: item.regularpwpcode || item.cover_code || '-',
-              accountType: item.accountType || item.account_type || '-',
-              pwptype: item.pwptype || item.pwp_type || '-'
-            };
-          }
-          return item;
-        });
-
-        setColumns(allColumns);
-        setData(normalizedData);
-      } else {
-        setData([]);
-        setColumns([]);
-      }
+      setColumns(allColumns);
+      setData(filteredData);
     } catch (err) {
       setError(`Unexpected error: ${err.message}`);
     } finally {
       setLoading(false);
     }
-  }, [filter, REGULAR_COLUMNS, COVER_COLUMNS, statusFilter, searchQuery, dateFrom, dateTo]);
+  }, [filter, REGULAR_COLUMNS, COVER_COLUMNS, statusFilter, searchQuery, dateFrom, dateTo, categoryMap]);
 
   // Updated getStatusBadge function - replace your existing one
   const getStatusBadge = (status) => {
@@ -332,8 +406,8 @@ const totalPages = Math.ceil(data.length / rowsPerPage);
   };
 
   useEffect(() => {
-  fetchData();
-}, [fetchData, rowsPerPage]);
+    fetchData();
+  }, [fetchData, rowsPerPage]);
 
   if (loading) {
     return (
@@ -502,9 +576,9 @@ const totalPages = Math.ceil(data.length / rowsPerPage);
               </div>
 
               {/* Date Range */}
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
                 gap: '8px',
                 backgroundColor: 'white',
                 padding: '8px 12px',
@@ -631,61 +705,86 @@ const totalPages = Math.ceil(data.length / rowsPerPage);
               </tr>
             </thead>
             <tbody>
-              {paginatedData.map((row, index) => (
-                <tr key={row.id || index} style={{
-                  backgroundColor: index % 2 === 0 ? 'white' : '#fafafa',
-                  transition: 'background-color 0.2s ease'
-                }}>
-                  {columns.map(col => (
-                    <td key={col} style={styles.td}>
-                      <span style={{ 
-                        maxWidth: window.innerWidth <= 768 ? '100px' : col === 'created_at' ? '150px' : '200px',
-                        display: 'inline-block',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
-                      }}>
-                        {formatCellValue(row[col], col)}
-                      </span>
+              {paginatedData.map((row, index) => {
+                // Log full row data including converted fields
+                console.log(`Row #${index + 1}:`, {
+                  ...row,
+                  accountType_converted: convertCodesToNames(row.accountType),
+                  account_type_converted: convertCodesToNames(row.account_type)
+                });
+
+                return (
+                  <tr
+                    key={row.id || index}
+                    style={{
+                      backgroundColor: index % 2 === 0 ? 'white' : '#fafafa',
+                      transition: 'background-color 0.2s ease'
+                    }}
+                  >
+                    {columns.map(col => (
+                      <td key={col} style={styles.td}>
+                        <span
+                          style={{
+                            maxWidth:
+                              window.innerWidth <= 768
+                                ? '100px'
+                                : col === 'created_at'
+                                  ? '150px'
+                                  : '200px',
+                            display: 'inline-block',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          {(col === "accountType" || col === "account_type")
+                            ? convertCodesToNames(row[col])
+                            : formatCellValue(row[col], col)
+                          }
+                        </span>
+                      </td>
+                    ))}
+                    <td style={{ ...styles.td, textAlign: 'center' }}>
+                      {getStatusBadge(row.approval_status)}
                     </td>
-                  ))}
-                  <td style={{...styles.td, textAlign: 'center'}}>
-                    {getStatusBadge(row.approval_status)}
-                  </td>
-                  <td style={{...styles.td, textAlign: 'center'}}>
-                    <button 
-                      onClick={() => handleViewRecord(row)} 
-                      style={{
-                        padding: '8px 16px',
-                        backgroundColor: '#2196f3', 
-                        color: 'white', 
-                        border: 'none', 
-                        borderRadius: '6px',
-                        cursor: 'pointer', 
-                        fontSize: '12px',
-                        fontWeight: '500',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        margin: '0 auto',
-                        transition: 'background-color 0.2s ease'
-                      }}
-                      onMouseOver={(e) => e.target.style.backgroundColor = '#1976d2'}
-                      onMouseOut={(e) => e.target.style.backgroundColor = '#2196f3'}
-                    >
-                      🔍 View
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    <td style={{ ...styles.td, textAlign: 'center' }}>
+                      <button
+                        onClick={() => handleViewRecord(row)}
+                        style={{
+                          padding: '8px 16px',
+                          backgroundColor: '#2196f3',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                          fontWeight: '500',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          margin: '0 auto',
+                          transition: 'background-color 0.2s ease'
+                        }}
+                        onMouseOver={(e) => (e.target.style.backgroundColor = '#1976d2')}
+                        onMouseOut={(e) => (e.target.style.backgroundColor = '#2196f3')}
+                      >
+                        🔍 View
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
+
+
+
           </table>
         </div>
 
 
-        
+
       </div>
-    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px', alignItems: 'center', gap: '12px' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px', alignItems: 'center', gap: '12px' }}>
         {/* Rows per page selector */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontSize: '14px' }}>Rows per page:</span>

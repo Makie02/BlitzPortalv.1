@@ -5,7 +5,7 @@ import { Modal, } from "react-bootstrap"; // Import Modal and Button from react-
 import Swal from 'sweetalert2';
 
 import { Dropdown, DropdownButton, ButtonGroup } from 'react-bootstrap'
-function EditModal({ isOpen, onClose, rowData, filter = "all",  }) {
+function EditModal({ isOpen, onClose, rowData, filter = "all", }) {
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState(null);
 
@@ -806,150 +806,97 @@ function EditModal({ isOpen, onClose, rowData, filter = "all",  }) {
       }
 
       const regular_code = formData.regularpwpcode;
+      let allSuccess = true;
 
-      // Separate total row and normal rows
-      const totalRow = skuList.find(item => item.sku === 'Total:');
-      const normalSkuRows = skuList.filter(item => item.sku !== 'Total:');
+      // Filter normal SKUs only
+      const normalSkuRows = skuList.filter(row => row.sku_code !== 'Total:');
 
-      // Prepare SKU data for insert/update
-      const skuData = normalSkuRows.map((item) => ({
-        sku: item.sku,
-        srp: item.srp,
-        qty: item.qty,
-        uom: item.uom,
-        discount: item.discount,
-        billing_amount: item.billing_amount,
-        regular_code,
-        row_type: item.row_type || 'regular',
-        remarks: item.remarks || '',
-      }));
+      for (const row of normalSkuRows) {
+        const computedBilling = Number(row.srp || 0) * Number(row.qty || 0) * (1 - Number(row.discount || 0) / 100);
 
-      let skuUpdated = true;
+        const payload = {
+          srp: row.srp || 0,
+          qty: row.qty || 0,
+          uom: row.uom || 'pc',
+          discount: row.discount || 0,
+          billing_amount: computedBilling,
+          total_amount: computedBilling,
+          created_at: new Date().toISOString(),
+        };
 
-      // First, insert/update all regular SKU rows
-      for (const sku of skuData) {
-        const { data: existingSku, error: selectSkuError } = await supabase
-          .from('regular_sku_listing')
+        // Update only if SKU exists
+        const { data: existingSku, error: checkError } = await supabase
+          .from('regular_sku')
           .select('id')
-          .eq('regular_code', sku.regular_code)
-          .eq('sku', sku.sku)
+          .eq('regular_code', regular_code)
+          .eq('sku_code', row.sku_code)
           .limit(1)
           .maybeSingle();
 
-        if (selectSkuError) {
-          throw new Error(`Error checking SKU record: ${selectSkuError.message}`);
+        if (checkError) {
+          console.error(`Error checking SKU ${row.sku_code}:`, checkError.message);
+          allSuccess = false;
+          continue;
         }
 
         if (existingSku) {
-          const { error: updateSkuError } = await supabase
-            .from('regular_sku_listing')
-            .update({
-              srp: sku.srp,
-              qty: sku.qty,
-              uom: sku.uom,
-              discount: sku.discount,
-              billing_amount: sku.billing_amount,
-              remarks: sku.remarks,
-              row_type: sku.row_type,
-            })
+          const { error: updateError } = await supabase
+            .from('regular_sku')
+            .update(payload)
             .eq('id', existingSku.id);
 
-          if (updateSkuError) {
-            skuUpdated = false;
-            console.error(`Error updating SKU ${sku.sku}: ${updateSkuError.message}`);
+          if (updateError) {
+            console.error(`Error updating SKU ${row.sku_code}:`, updateError.message);
+            allSuccess = false;
           } else {
-            console.log(`SKU ${sku.sku} updated successfully`);
+            console.log(`SKU ${row.sku_code} updated successfully`);
           }
-
         } else {
-          const { error: insertSkuError } = await supabase
-            .from('regular_sku_listing')
-            .insert([sku]);
-
-          if (insertSkuError) {
-            skuUpdated = false;
-            console.error(`Error inserting SKU ${sku.sku}: ${insertSkuError.message}`);
-          } else {
-            console.log(`SKU ${sku.sku} inserted successfully`);
-          }
+          console.log(`SKU ${row.sku_code} does not exist. Skipping insert.`);
         }
       }
 
-      // ✅ Handle Total row separately
-      // ✅ Handle Total row separately
-      if (totalRow) {
-        // Calculate total billing amount from regular SKUs
-        const totalBillingAmount = skuData.reduce(
-          (sum, item) => sum + (Number(item.billing_amount) || 0),
-          0
-        );
+      // Update Total row dynamically
+      const totalBilling = normalSkuRows.reduce((sum, r) => sum + Number(r.srp || 0) * Number(r.qty || 0) * (1 - Number(r.discount || 0) / 100), 0);
+      const { data: existingTotal, error: checkTotalError } = await supabase
+        .from('regular_sku')
+        .select('id')
+        .eq('regular_code', regular_code)
+        .eq('sku_code', 'Total:')
+        .limit(1)
+        .maybeSingle();
 
-        // Force srp and qty to 0 for Total row
-        const totalSku = {
-          sku: 'Total:',
-          srp: 0,
-          qty: 0,
-          uom: totalRow.uom || 'EA',
-          discount: 0,
-          billing_amount: totalBillingAmount.toFixed(2),
-          regular_code,
-          row_type: 'regular',
-          remarks: 'Summary of all entries',
-        };
+      if (checkTotalError) {
+        console.error('Error checking Total row:', checkTotalError.message);
+        allSuccess = false;
+      } else if (existingTotal) {
+        const { error: updateTotalError } = await supabase
+          .from('regular_sku')
+          .update({ billing_amount: totalBilling, total_amount: totalBilling, updated_at: new Date().toISOString() })
+          .eq('id', existingTotal.id);
 
-        const { data: existingTotalRow, error: selectTotalError } = await supabase
-          .from('regular_sku_listing')
-          .select('id')
-          .eq('regular_code', regular_code)
-          .eq('sku', 'Total:')
-          .limit(1)
-          .maybeSingle();
-
-        if (selectTotalError) {
-          throw new Error(`Error checking Total row: ${selectTotalError.message}`);
-        }
-
-        if (existingTotalRow) {
-          const { error: updateTotalError } = await supabase
-            .from('regular_sku_listing')
-            .update(totalSku)
-            .eq('id', existingTotalRow.id);
-
-          if (updateTotalError) {
-            skuUpdated = false;
-            console.error(`Error updating Total row: ${updateTotalError.message}`);
-          } else {
-            console.log('Total row updated successfully');
-          }
-
+        if (updateTotalError) {
+          console.error('Error updating Total row:', updateTotalError.message);
+          allSuccess = false;
         } else {
-          const { error: insertTotalError } = await supabase
-            .from('regular_sku_listing')
-            .insert([totalSku]);
-
-          if (insertTotalError) {
-            skuUpdated = false;
-            console.error(`Error inserting Total row: ${insertTotalError.message}`);
-          } else {
-            console.log('Total row inserted successfully');
-          }
+          console.log('Total row updated successfully');
         }
       }
-      // ✅ Update the regular_pwp table with new balances
 
-
-      if (skuUpdated) {
-        console.log('All SKUs were processed successfully');
+      if (allSuccess) {
+        console.log('All SKUs updated successfully!');
       } else {
-        console.log('Some SKU updates failed. Check console for details.');
-        alert('Some SKU updates failed.');
+        alert('Some SKUs failed to update. Check console.');
       }
 
     } catch (err) {
-      setError(`Error submitting SKU table: ${err.message}`);
-      console.error('Error in submitSkuTable:', err);
+      console.error('Error updating SKU table:', err);
+      setError(`Error updating SKU table: ${err.message}`);
     }
   };
+
+
+
 
   useEffect(() => {
     console.log("Remaining Balance:", Number(formValues.remaining_balance).toFixed(2));
@@ -977,7 +924,7 @@ function EditModal({ isOpen, onClose, rowData, filter = "all",  }) {
       setSkuLoading(true);
       try {
         const { data, error } = await supabase
-          .from("regular_sku_listing")
+          .from("regular_sku")
           .select("*")
           .eq("regular_code", formData.regularpwpcode);
 
@@ -1165,15 +1112,73 @@ function EditModal({ isOpen, onClose, rowData, filter = "all",  }) {
   const adjustedRemainingBalance = Number(formValues.remaining_balance) - billingDifference;
 
   // Calculate the total billing amount and remaining excluding the "Total:" row
-  const totalBillingAmount = skuList
-    .filter((item) => item.sku !== "Total:")  // Exclude the "Total:" row
-    .reduce((acc, { billing_amount }) => acc + (billing_amount || 0), 0);
+  const [categoryMap, setCategoryMap] = useState({}); // key = sku_code, value = name
 
-  const totalRemaining = skuList
-    .filter((item) => item.sku !== "Total:")  // Exclude the "Total:" row
-    .reduce((acc, { remaining }) => acc + (remaining || 0), 0);  // Assuming you have a `remaining` field
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('category_listing')
+          .select('sku_code, name');
+
+        if (error) throw error;
+
+        const map = {};
+        data.forEach((cat) => {
+          map[cat.sku_code] = cat.name;
+        });
+
+        setCategoryMap(map);
+      } catch (err) {
+        console.error('Error fetching categories:', err.message);
+      }
+    };
+
+    fetchCategories();
+  }, []);
+
+
+  const [badorderList, setBadorderList] = useState([]);
+  const [editingId, setEditingId] = useState(null);
+
+  // Fetch badorder data when formData.regularpwpcode changes
+  useEffect(() => {
+    if (!formData?.regularpwpcode) {
+      setBadorderList([]);
+      return;
+    }
+
+    const fetchBadorder = async () => {
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from("regular_badorder")
+          .select("*")
+          .eq("code_pwp", formData.regularpwpcode)
+          .order("id", { ascending: true });
+
+        if (error) throw error;
+        setBadorderList(data || []);
+      } catch (err) {
+        console.error("Error fetching badorder:", err.message);
+        setBadorderList([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchBadorder();
+  }, [formData?.regularpwpcode]);
+
+  // Handle input changes
+
+
+
+
+  // Delete row
 
   if (!isOpen || !formData) return null;
+
 
   const isCoverPwp = !!formData.cover_code;
 
@@ -2040,7 +2045,6 @@ function EditModal({ isOpen, onClose, rowData, filter = "all",  }) {
               <p style={{ textAlign: "center", color: "#888" }}>Loading SKU list...</p>
             ) : skuList.length === 0 ? (
               <p style={{ textAlign: "center", color: "#888" }}>
-                No SKUs found for selected regular code.
               </p>
             ) : (
               <table
@@ -2064,7 +2068,6 @@ function EditModal({ isOpen, onClose, rowData, filter = "all",  }) {
                     }}
                   >
                     <th style={{ padding: "12px", border: "1px solid #ddd" }}>SKU</th>
-
                     <th style={{ padding: "12px", border: "1px solid #ddd" }}>SRP</th>
                     <th style={{ padding: "12px", border: "1px solid #ddd" }}>Qty</th>
                     <th style={{ padding: "12px", border: "1px solid #ddd" }}>UOM</th>
@@ -2072,195 +2075,113 @@ function EditModal({ isOpen, onClose, rowData, filter = "all",  }) {
                     <th style={{ padding: "12px", border: "1px solid #ddd" }}>Billing Amount</th>
                   </tr>
                 </thead>
+
                 <tbody>
-                  {skuList.map(
-                    (
-                      {
-                        id,
-                        sku,
-                        srp,
-                        qty,
-                        uom,
-                        discount,
-                        billing_amount,
-                        row_type, // This should be your identifier for the total row
-                        remarks,
-                      },
-                      idx
-                    ) => {
-                      if (sku === "Total:") {
-                        // Block the row with sku "Total:" by returning null
-                        return null;
-                      }
+                  {skuList.map(({ id, sku_code, srp, qty, uom, discount, billing_amount }, idx) => {
+                    // Skip Total row, we'll compute it dynamically in footer
+                    if (sku_code === "Total:") return null;
 
-                      return (
-                        <tr
-                          key={id}
-                          style={{
-                            borderBottom: "1px solid #ddd",
-                            textAlign: "center",
-                            fontSize: "14px",
-                            transition: "background-color 0.3s ease",
-                          }}
-                          onMouseEnter={(e) => (e.target.style.backgroundColor = "#f0f8ff")}
-                          onMouseLeave={(e) => (e.target.style.backgroundColor = "")}
-                        >
-                          {/* SKU Column - Hidden if it's the "Total" row */}
-                          {row_type !== "Total" ? (
-                            <td style={{ padding: "10px", border: "1px solid #ddd" }}>
-                              <input
-                                type="text"
-                                value={sku || ""}
-                                onChange={(e) => handleSkuChange(id, "sku", e.target.value)}
-                                style={{
-                                  width: "100%",
-                                  boxSizing: "border-box",
-                                  padding: "8px",
-                                  borderRadius: "5px",
-                                  border: "1px solid #ddd",
-                                  fontSize: "14px",
-                                  transition: "border-color 0.3s ease",
-                                }}
-                              />
-                            </td>
-                          ) : (
-                            <td style={{ padding: "10px", border: "1px solid #ddd" }}></td>
-                          )}
-                          {/* SRP Field */}
-                          {row_type !== "Total" ? (
-                            <td style={{ padding: "10px", border: "1px solid #ddd" }}>
-                              <input
-                                type="number"
-                                value={srp || 0}
-                                onChange={(e) => handleSkuChange(id, "srp", e.target.value)}
-                                style={{
-                                  width: "100%",
-                                  boxSizing: "border-box",
-                                  padding: "8px",
-                                  borderRadius: "5px",
-                                  border: "1px solid #ddd",
-                                  fontSize: "14px",
-                                  transition: "border-color 0.3s ease",
-                                }}
-                                step="0.01"
-                              />
-                            </td>
-                          ) : (
-                            <td style={{ padding: "10px", border: "1px solid #ddd" }}>
-                              <span>{srp || 0}</span>
-                            </td>
-                          )}
+                    const computedBilling = Number(srp || 0) * Number(qty || 0) * (1 - Number(discount || 0) / 100);
 
-                          {/* Qty Field */}
-                          {row_type !== "Total" ? (
-                            <td style={{ padding: "10px", border: "1px solid #ddd" }}>
-                              <input
-                                type="number"
-                                value={qty || 0}
-                                onChange={(e) => handleSkuChange(id, "qty", e.target.value)}
-                                style={{
-                                  width: "100%",
-                                  boxSizing: "border-box",
-                                  padding: "8px",
-                                  borderRadius: "5px",
-                                  border: "1px solid #ddd",
-                                  fontSize: "14px",
-                                  transition: "border-color 0.3s ease",
-                                }}
-                              />
-                            </td>
-                          ) : (
-                            <td style={{ padding: "10px", border: "1px solid #ddd" }}>
-                              <span>{qty || 0}</span>
-                            </td>
-                          )}
-
-                          {/* UOM Field */}
-                          {row_type !== "Total" ? (
-                            <td style={{ padding: "10px", border: "1px solid #ddd" }}>
-                              <select
-                                value={uom || ""}
-                                onChange={(e) => handleSkuChange(id, "uom", e.target.value)}
-                                style={{
-                                  width: "100%",
-                                  boxSizing: "border-box",
-                                  padding: "8px",
-                                  borderRadius: "5px",
-                                  border: "1px solid #ddd",
-                                  fontSize: "14px",
-                                  transition: "border-color 0.3s ease",
-                                }}
-                              >
-                                <option value="">Select UOM</option>
-                                <option value="case">Case</option>
-                                <option value="pc">PC</option>
-                                <option value="ibx">IBX</option>
-                              </select>
-                            </td>
-                          ) : (
-                            <td style={{ padding: "10px", border: "1px solid #ddd" }}>
-                              <span>{uom || "N/A"}</span>
-                            </td>
-                          )}
-
-                          {/* Discount Field */}
-                          {row_type !== "Total" ? (
-                            <td style={{ padding: "10px", border: "1px solid #ddd" }}>
-                              <input
-                                type="number"
-                                value={discount || 0}
-                                onChange={(e) => handleSkuChange(id, "discount", e.target.value)}
-                                style={{
-                                  width: "100%",
-                                  boxSizing: "border-box",
-                                  padding: "8px",
-                                  borderRadius: "5px",
-                                  border: "1px solid #ddd",
-                                  fontSize: "14px",
-                                  transition: "border-color 0.3s ease",
-                                }}
-                                step="0.01"
-                              />
-                            </td>
-                          ) : (
-                            <td style={{ padding: "10px", border: "1px solid #ddd" }}>
-                              <span>{discount || 0}</span>
-                            </td>
-                          )}
-
-                          {/* Billing Amount Field */}
-                          {row_type !== "Total" ? (
-                            <td style={{ padding: "10px", border: "1px solid #ddd" }}>
-                              <input
-                                type="number"
-                                value={billing_amount || 0}
-                                disabled
-                                style={{
-                                  width: "100%",
-                                  boxSizing: "border-box",
-                                  padding: "8px",
-                                  borderRadius: "5px",
-                                  border: "1px solid #ddd",
-                                  fontSize: "14px",
-                                  backgroundColor: "#f0f0f0",
-                                  color: "#888",
-                                }}
-                              />
-                            </td>
-                          ) : (
-                            <td style={{ padding: "10px", border: "1px solid #ddd" }}>
-                              <span>{billing_amount || 0}</span>
-                            </td>
-                          )}
-                        </tr>
-                      );
-                    }
-                  )}
+                    return (
+                      <tr
+                        key={id}
+                        style={{
+                          borderBottom: "1px solid #ddd",
+                          textAlign: "center",
+                          fontSize: "14px",
+                          transition: "background-color 0.3s ease",
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f0f8ff")}
+                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "")}
+                      >
+                        <td style={{ width: '300px', padding: "10px", border: "1px solid #ddd" }}>
+                          <input
+                            type="text"
+                            value={categoryMap[sku_code] || sku_code || ""}
+                            onChange={(e) => handleSkuChange(id, "sku_code", e.target.value)}
+                            style={{
+                              width: "100%",
+                              boxSizing: "border-box",
+                              padding: "8px",
+                              borderRadius: "5px",
+                              border: "1px solid #ddd",
+                              fontSize: "14px",
+                            }}
+                            disabled
+                          />
+                        </td>
 
 
+                        <td style={{ padding: "10px", border: "1px solid #ddd" }}>
+                          <input
+                            type="number"
+                            value={srp || 0}
+                            step="0.01"
+                            onChange={(e) => handleSkuChange(id, "srp", e.target.value)}
+                            style={{
+                              width: "100%",
+                              padding: "8px",
+                              borderRadius: "5px",
+                              border: "1px solid #ddd",
+                            }}
+                          />
+                        </td>
 
+                        <td style={{ padding: "10px", border: "1px solid #ddd" }}>
+                          <input
+                            type="number"
+                            value={qty || 0}
+                            onChange={(e) => handleSkuChange(id, "qty", e.target.value)}
+                            style={{
+                              width: "100%",
+                              padding: "8px",
+                              borderRadius: "5px",
+                              border: "1px solid #ddd",
+                            }}
+                          />
+                        </td>
 
+                        <td style={{ padding: "10px", border: "1px solid #ddd" }}>
+                          <select
+                            value={uom || "pc"}
+                            onChange={(e) => handleSkuChange(id, "uom", e.target.value)}
+                            style={{
+                              width: "100%",
+                              padding: "8px",
+                              borderRadius: "5px",
+                              border: "1px solid #ddd",
+                            }}
+                          >
+                            <option value="pc">PC</option>
+                            <option value="case">Case</option>
+                            <option value="ibx">IBX</option>
+                          </select>
+                        </td>
+
+                        <td style={{ width: '50px', padding: "10px", border: "1px solid #ddd" }}>
+                          <input
+                            type="number"
+                            value={discount || 0}
+                            step="0.01"
+                            onChange={(e) => handleSkuChange(id, "discount", e.target.value)}
+                            style={{
+                              width: "100%",
+                              padding: "8px",
+                              borderRadius: "5px",
+                              border: "1px solid #ddd",
+                            }}
+                          />
+                        </td>
+
+                        <td style={{ width: '50px', padding: "10px", border: "1px solid #ddd" }}>
+                          <span>{computedBilling.toFixed(2)}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
+
                 <tfoot>
                   <tr>
                     <td colSpan="5" style={{ textAlign: "right", padding: "12px", border: "1px solid #ddd" }}>
@@ -2270,6 +2191,7 @@ function EditModal({ isOpen, onClose, rowData, filter = "all",  }) {
                       {Number(formValues.remaining_balance).toFixed(2)}
                     </td>
                   </tr>
+
                   <tr>
                     <td colSpan="5" style={{ textAlign: "right", padding: "12px", border: "1px solid #ddd" }}>
                       Original Total Billing:
@@ -2278,6 +2200,7 @@ function EditModal({ isOpen, onClose, rowData, filter = "all",  }) {
                       {originalTotalBilling.toFixed(2)}
                     </td>
                   </tr>
+
                   <tr>
                     <td colSpan="5" style={{ textAlign: "right", padding: "12px", border: "1px solid #ddd" }}>
                       Current Total Billing:
@@ -2286,6 +2209,7 @@ function EditModal({ isOpen, onClose, rowData, filter = "all",  }) {
                       {currentTotalBilling.toFixed(2)}
                     </td>
                   </tr>
+
                   <tr>
                     <td colSpan="5" style={{ textAlign: "right", padding: "12px", border: "1px solid #ddd" }}>
                       Billing Difference:
@@ -2294,6 +2218,7 @@ function EditModal({ isOpen, onClose, rowData, filter = "all",  }) {
                       {billingDifference.toFixed(2)}
                     </td>
                   </tr>
+
                   <tr>
                     <td
                       colSpan="6"
@@ -2311,18 +2236,45 @@ function EditModal({ isOpen, onClose, rowData, filter = "all",  }) {
                     </td>
                   </tr>
                 </tfoot>
-
-
-
-
-                {/* Total Calculation and Display */}
-                {/* Display total and remaining values */}
-
-
-
               </table>
             )}
           </div>
+          {formData?.activityName === "BAD ORDER" && badorderList.length > 0 && (
+            <div>
+              <h2 style={{textAlign:'left'}}>BAD ORDER  </h2>
+
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ backgroundColor: "#1976d2", color: "#fff" }}>
+                    <th style={{ padding: "8px" }}>Category</th>
+                    <th style={{ padding: "8px" }}>Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {badorderList.map((row) => (
+                    <tr key={row.id} style={{ borderBottom: "1px solid #ccc" }}>
+                      <td style={{ padding: "8px" }}>{row.category}</td>
+                      <td style={{ padding: "8px" }}>{row.amount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ backgroundColor: "#f0f0f0", fontWeight: "bold" }}>
+                    <td style={{ padding: "8px" }}>Total</td>
+                    <td style={{ padding: "8px" }}>
+                      {badorderList[badorderList.length - 1]?.total || 0}
+                    </td>
+                  </tr>
+                  <tr style={{ backgroundColor: "#f0f0f0", fontWeight: "bold" }}>
+                    <td style={{ padding: "8px" }}>Remaining Budget</td>
+                    <td style={{ padding: "8px" }}>
+                      {badorderList[badorderList.length - 1]?.remaining_budget || 0}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
 
 
           {/* Buttons */}

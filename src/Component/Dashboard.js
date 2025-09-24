@@ -19,10 +19,10 @@ const initialStatuses = [
 
 {
   initialStatuses.map(({ label, color, fontSize }) => (
-    <div key={label} style={{ color, fontSize, fontWeight: 600 }}>
-      {label}
-    </div>
-  ))
+  <div key={label} style={{ color, fontSize, fontWeight: 600 }}>
+    {label}
+  </div>
+))
 }
 const ppeTrend = [
   { month: "Jan", Cancelled: 1 },
@@ -90,80 +90,80 @@ export default function Dashboard() {
     }
     return records || [];
   }
-  useEffect(() => {
-    async function fetchVisaAndApprovalData() {
-      try {
-        const currentUser = JSON.parse(localStorage.getItem('loggedInUser'));
-        const currentUserName = currentUser?.name?.toLowerCase().trim() || "";
-        const role = currentUser?.role || "";
+useEffect(() => {
+  async function fetchVisaAndApprovalData() {
+    try {
+      const currentUser = JSON.parse(localStorage.getItem('loggedInUser'));
+      const currentUserName = currentUser?.name?.toLowerCase().trim() || "";
+      const role = currentUser?.role || "";
 
-        // Fetch visa records
-        const coverVisa = await fetchVisaData("cover_pwp");
-        const regularVisa = await fetchVisaData("regular_pwp");
+      // Fetch visa records
+      const coverVisa = await fetchVisaData("cover_pwp");
+      const regularVisa = await fetchVisaData("regular_pwp");
 
-        // Combine visa records and filter by CreatedForm if not admin
-        let allVisaRecords = [...coverVisa, ...regularVisa];
-        if (role !== 'admin') {
-          allVisaRecords = allVisaRecords.filter(record =>
-            record.CreatedForm?.toLowerCase().trim() === currentUserName
-          );
-        }
-        const totalVisaCount = allVisaRecords.length;
-
-        // Fetch approval history with Response and CreatedForm
-        const { data: approvalRecords, error } = await supabase
-          .from("Approval_History")
-          .select("Response, CreatedForm");
-
-        if (error) {
-          console.error("Error fetching Approval_History:", error);
-          return;
-        }
-
-        // Filter approval records by CreatedForm if not admin
-        const filteredApprovalRecords = role === 'admin'
-          ? approvalRecords
-          : approvalRecords.filter(record => record.CreatedForm?.toLowerCase().trim() === currentUserName);
-
-        // Count status occurrences
-        let approvedCount = 0;
-        let disapprovedCount = 0;
-        let cancelledCount = 0;
-
-        filteredApprovalRecords.forEach(record => {
-          const response = record.Response;
-          if (response === "Approved") {
-            approvedCount++;
-          } else if (response === "Declined" || response === "Disapproved") {
-            disapprovedCount++;
-          } else if (response === "Cancelled") {
-            cancelledCount++;
-          }
-        });
-
-        const forApprovalCount = totalVisaCount - approvedCount - disapprovedCount - cancelledCount;
-
-        const statusCounts = {
-          "For Approval": forApprovalCount > 0 ? forApprovalCount : 0,
-          Approved: approvedCount,
-          Disapproved: disapprovedCount,
-          Cancelled: cancelledCount,
-        };
-
-        const updatedData = initialStatuses.map(({ label, color }) => ({
-          label,
-          value: statusCounts[label] || 0,
-          color,
-        }));
-
-        setData(updatedData);
-      } catch (error) {
-        console.error("Error fetching visa and approval data:", error);
+      // Combine visa records and filter by CreatedForm if not admin
+      let allVisaRecords = [...coverVisa, ...regularVisa];
+      if (role !== 'admin') {
+        allVisaRecords = allVisaRecords.filter(record =>
+          record.CreatedForm?.toLowerCase().trim() === currentUserName
+        );
       }
-    }
+      const totalVisaCount = allVisaRecords.length;
 
-    fetchVisaAndApprovalData();
-  }, []);
+      // Fetch approval history with Response and CreatedForm
+      const { data: approvalRecords, error } = await supabase
+        .from("Approval_History")
+        .select("Response, CreatedForm");
+
+      if (error) {
+        console.error("Error fetching Approval_History:", error);
+        return;
+      }
+
+      // Filter approval records by CreatedForm if not admin
+      const filteredApprovalRecords = role === 'admin'
+        ? approvalRecords
+        : approvalRecords.filter(record => record.CreatedForm?.toLowerCase().trim() === currentUserName);
+
+      // Count status occurrences
+      let approvedCount = 0;
+      let disapprovedCount = 0;
+      let cancelledCount = 0;
+
+      filteredApprovalRecords.forEach(record => {
+        const response = record.Response;
+        if (response === "Approved") {
+          approvedCount++;
+        } else if (response === "Declined" || response === "Disapproved") {
+          disapprovedCount++;
+        } else if (response === "Cancelled") {
+          cancelledCount++;
+        }
+      });
+
+      const forApprovalCount = totalVisaCount - approvedCount - disapprovedCount - cancelledCount;
+
+      const statusCounts = {
+        "For Approval": forApprovalCount > 0 ? forApprovalCount : 0,
+        Approved: approvedCount,
+        Disapproved: disapprovedCount,
+        Cancelled: cancelledCount,
+      };
+
+      const updatedData = initialStatuses.map(({ label, color }) => ({
+        label,
+        value: statusCounts[label] || 0,
+        color,
+      }));
+
+      setData(updatedData);
+    } catch (error) {
+      console.error("Error fetching visa and approval data:", error);
+    }
+  }
+
+  fetchVisaAndApprovalData();
+}, []);
 
   const [monthlyTrend, setMonthlyTrend] = useState([]);  // Line data for Approved + Disapproved
   const [ppeTrend, setPpeTrend] = useState([]);      // Line data for Cancelled
@@ -288,9 +288,12 @@ export default function Dashboard() {
   }, [fetchRemainingBalance]);
 
 
+
+
+
   return (
-    <div style={{ display: "flex", justifyContent: "center", padding: "5px" }}>
-      <div style={{ maxWidth: "1600px", width: "100%", overflowX: "auto" }}>
+    <div style={{ display: "flex", justifyContent: "center", padding: "20px" }}>
+      <div style={{ maxWidth: "1500px", width: "100%", overflowX: "auto" }}>
         <h1
           style={{
             fontSize: "2rem",
@@ -321,11 +324,11 @@ export default function Dashboard() {
     /* Card base styles */
     .card {
       flex: 1 1 280px; /* grow, shrink, base width */
-      max-width: 270px;
+      max-width: 320px;
       background: white;
       border-radius: 0.75rem;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.07);
-      padding: 1rem 1.75rem 1.75rem 1.75rem;
+      padding: 1.25rem 1.75rem 1.75rem 1.75rem;
       position: relative;
       transition: transform 0.3s ease, box-shadow 0.3s ease;
       cursor: default;
@@ -335,30 +338,6 @@ export default function Dashboard() {
       transform: scale(1.05);
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
     }
-      @media (max-width: 1200px) {
-  .card-container {
-    grid-template-columns: repeat(4, 1fr);
-  }
-}
-
-@media (max-width: 992px) {
-  .card-container {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-@media (max-width: 768px) {
-  .card-container {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 480px) {
-  .card-container {
-    grid-template-columns: 1fr;
-  }
-}
-
 
     /* Reload button container */
     .reload-button-container {
